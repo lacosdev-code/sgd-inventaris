@@ -4,6 +4,10 @@ const PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY;
 const UPLOAD_API_URL = "https://upload.imagekit.io/api/v1/files/upload";
 
 export const uploadImage = async (file: File): Promise<string> => {
+  if (!PUBLIC_KEY) {
+    throw new Error("Configuration Error: VITE_IMAGEKIT_PUBLIC_KEY is missing. Please check your .env file.");
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('fileName', file.name.replace(/\s+/g, '_') || `upload_${Date.now()}`);
