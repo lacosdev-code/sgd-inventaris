@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { FaUser, FaToolbox, FaExclamationTriangle, FaSearch, FaWhatsapp, FaPlus } from 'react-icons/fa';
+import { FaUser, FaToolbox, FaExclamationTriangle, FaSearch, FaWhatsapp, FaPlus, FaFilePdf, FaSync } from 'react-icons/fa';
 import Swal from 'sweetalert2';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { format } from 'date-fns';
 
 const InventarisOrang = () => {
   const [dataOrang, setDataOrang] = useState<any[]>([]);
@@ -15,16 +18,47 @@ const InventarisOrang = () => {
   const fetchDataOrang = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // 1. Fetch permanent assignments
+      const { data: permanentData, error: permError } = await supabase
         .from('inventaris_orang')
         .select('*')
         .order('orang', { ascending: true });
 
-      if (error) throw error;
-      setDataOrang(data || []);
+      if (permError) console.error('Permanent items error:', permError);
+
+      // 2. Fetch active loans
+      const { data: loanData, error: loanError } = await supabase
+        .from('peminjaman')
+        .select('id, peminjam, barang_nama, tgl_pinjam, tgl_kembali_rencana, kondisi_pinjam')
+        .eq('status', 'dipinjam')
+        .order('peminjam', { ascending: true });
+
+      if (loanError) console.error('Loan items error:', loanError);
+
+      // 3. Transform permanent items
+      const permanentItems = (permanentData || []).map(item => ({
+        ...item,
+        type: 'permanent' as const
+      }));
+
+      // 4. Transform loan items
+      const loanItems = (loanData || []).map(loan => ({
+        id: `loan-${loan.id}`,
+        orang: loan.peminjam,
+        nama: loan.barang_nama,
+        jumlah: 1,
+        kondisi: loan.kondisi_pinjam || 'Tidak Diketahui',
+        type: 'loan' as const,
+        tgl_kembali: loan.tgl_kembali_rencana,
+        loan_id: loan.id
+      }));
+
+      // 5. Merge both datasets
+      const mergedData = [...permanentItems, ...loanItems];
+      setDataOrang(mergedData);
     } catch (error: any) {
       console.error('Error:', error.message);
-      // Prevent crash if table doesn't exist yet
       setDataOrang([]);
     } finally {
       setLoading(false);
@@ -108,6 +142,89 @@ const InventarisOrang = () => {
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
+  // Fungsi export PDF per orang
+  const exportPersonPDF = (person: string, items: any[]) => {
+    const doc = new jsPDF();
+
+    doc.setFillColor(1, 50, 32);
+    doc.rect(0, 0, 210, 40, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAPORAN INVENTARIS PERSONEL', 105, 15, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('PT Sarana Guna Dharma', 105, 22, { align: 'center' });
+    doc.text('Jl. Raya Bekasi KM 18, Jakarta Timur', 105, 28, { align: 'center' });
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Nama Personel: ${person}`, 14, 50);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tanggal Cetak: ${format(new Date(), 'dd MMMM yyyy')}`, 14, 57);
+    doc.text(`Total Item: ${items.length}`, 14, 64);
+
+    const tableData = items.map((item, idx) => [
+      idx + 1,
+      item.nama,
+      item.type === 'permanent' ? 'Tetap' : 'Pinjaman',
+      item.kondisi,
+      item.type === 'loan' && item.tgl_kembali
+        ? format(new Date(item.tgl_kembali), 'dd/MM/yyyy')
+        : '-'
+    ]);
+
+    autoTable(doc, {
+      startY: 72,
+      head: [['No', 'Nama Barang', 'Jenis', 'Kondisi', 'Tgl Kembali']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [1, 50, 32],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: {
+        fontSize: 9,
+        cellPadding: 3
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 15 },
+        1: { cellWidth: 70 },
+        2: { halign: 'center', cellWidth: 30 },
+        3: { halign: 'center', cellWidth: 30 },
+        4: { halign: 'center', cellWidth: 35 }
+      }
+    });
+
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Halaman ${i} dari ${pageCount}`,
+        105,
+        doc.internal.pageSize.height - 10,
+        { align: 'center' }
+      );
+    }
+
+    doc.save(`Inventaris_${person.replace(/\s+/g, '_')}_${format(new Date(), 'ddMMyyyy')}.pdf`);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'PDF Berhasil Diunduh!',
+      text: `Laporan inventaris ${person} telah tersimpan.`,
+      timer: 2000,
+      showConfirmButton: false
+    });
+  };
+
   // Pengelompokan data berdasarkan nama orang
   const groupedData = dataOrang.reduce((acc: any, item: any) => {
     if (!acc[item.orang]) acc[item.orang] = [];
@@ -183,13 +300,22 @@ const InventarisOrang = () => {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => shareToWA(nama, groupedData[nama])}
-                    className="group/wa p-3.5 bg-white/10 hover:bg-[#25D366] rounded-2xl transition-all duration-300 backdrop-blur-sm border border-white/20 hover:scale-110 active:scale-95"
-                    title="Kirim Rekap WA"
-                  >
-                    <FaWhatsapp size={24} className="text-[#25D366] group-hover/wa:text-white transition-colors" />
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => exportPersonPDF(nama, groupedData[nama])}
+                      className="group/pdf p-3.5 bg-white/10 hover:bg-red-600 rounded-2xl transition-all duration-300 backdrop-blur-sm border border-white/20 hover:scale-110 active:scale-95"
+                      title="Export PDF"
+                    >
+                      <FaFilePdf size={24} className="text-red-400 group-hover/pdf:text-white transition-colors" />
+                    </button>
+                    <button
+                      onClick={() => shareToWA(nama, groupedData[nama])}
+                      className="group/wa p-3.5 bg-white/10 hover:bg-[#25D366] rounded-2xl transition-all duration-300 backdrop-blur-sm border border-white/20 hover:scale-110 active:scale-95"
+                      title="Kirim Rekap WA"
+                    >
+                      <FaWhatsapp size={24} className="text-[#25D366] group-hover/wa:text-white transition-colors" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -206,7 +332,20 @@ const InventarisOrang = () => {
                       </div>
                       <div>
                         <p className="text-sm font-black text-slate-900">{item.nama}</p>
-                        <p className="text-xs text-slate-500 font-semibold mt-0.5">{item.jumlah} Unit</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${item.type === 'permanent'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-orange-100 text-orange-700'
+                            }`}>
+                            {item.type === 'permanent' ? '📦 Tetap' : '🔄 Pinjaman'}
+                          </span>
+                          <p className="text-xs text-slate-500 font-semibold">
+                            {item.jumlah} Unit
+                            {item.type === 'loan' && item.tgl_kembali && (
+                              <span className="text-orange-600"> • Kembali: {format(new Date(item.tgl_kembali), 'dd/MM/yy')}</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
                     <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
