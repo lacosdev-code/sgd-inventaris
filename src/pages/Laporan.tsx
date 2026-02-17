@@ -67,23 +67,76 @@ const Laporan = () => {
 
     // --- EXPORT FUNCTIONS ---
 
-    const exportPDF = () => {
+    // Helper to load image for PDF
+    const loadImage = (url: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.src = url;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                } else {
+                    resolve(''); // Fallback if canvas fails
+                }
+            };
+            img.onerror = () => resolve(''); // Fallback if load fails
+        });
+    };
+
+    const exportPDF = async () => {
         const doc = new jsPDF();
-        const title = activeTab === 'stok' ? 'Laporan Stok Aset' :
-            activeTab === 'peminjaman' ? 'Laporan Peminjaman' : 'Jadwal Maintenance';
+        const title = activeTab === 'stok' ? 'LAPORAN STOK ASET' :
+            activeTab === 'peminjaman' ? 'LAPORAN PEMINJAMAN' : 'JADWAL MAINTENANCE';
 
-        // Header
-        doc.setFontSize(18);
-        doc.text('PT. SUNGGIARDI CORPORATION', 14, 22);
-        doc.setFontSize(14);
-        doc.text(title, 14, 32);
-        doc.setFontSize(10);
-        doc.text(`Dicetak pada: ${format(new Date(), 'dd MMM yyyy HH:mm', { locale: idLocale })}`, 14, 40);
-
-        if (activeTab === 'peminjaman') {
-            doc.text(`Periode: ${startDate} s/d ${endDate}`, 14, 46);
+        // --- HEADER WITH LOGO ---
+        try {
+            const logoUrl = "https://ik.imagekit.io/Sgd/Logo%20Potrait.png?tr=w-200"; // Responsive resize
+            const logoData = await loadImage(logoUrl);
+            if (logoData) {
+                doc.addImage(logoData, 'PNG', 14, 10, 25, 25);
+            }
+        } catch (e) {
+            console.warn("Logo failed to load", e);
         }
 
+        // Company Info
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(1, 50, 32); // SGD Green
+        doc.text('PT. SUNGGIARDI CORPORATION', 45, 20);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('Jl. Raya Cilandak KKO No. 1, Jakarta Selatan', 45, 26);
+        doc.text('Email: admin@sgd-corp.com | Telp: (021) 789-1234', 45, 31);
+
+        // Line separator
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(1, 50, 32);
+        doc.line(14, 38, 196, 38);
+
+        // Report Title & Date
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text(title, 14, 48);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Dicetak: ${format(new Date(), 'dd MMM yyyy HH:mm', { locale: idLocale })}`, 14, 54);
+
+        if (activeTab === 'peminjaman') {
+            doc.text(`Periode: ${format(new Date(startDate), 'dd MMM yyyy')} s/d ${format(new Date(endDate), 'dd MMM yyyy')}`, 14, 60);
+        }
+
+        // Data Preparation
         let head = [];
         let body = [];
 
@@ -111,11 +164,43 @@ const Laporan = () => {
         }
 
         autoTable(doc, {
-            startY: 50,
+            startY: activeTab === 'peminjaman' ? 65 : 60,
             head: head,
             body: body,
             theme: 'grid',
-            headStyles: { fillColor: [1, 50, 32] }, // SGD Green
+            headStyles: {
+                fillColor: [1, 50, 32],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold'
+            },
+            styles: { fontSize: 9, cellPadding: 3 },
+            alternateRowStyles: { fillColor: [245, 250, 245] },
+            didParseCell: (data) => {
+                // Color Coding Logic
+                if (data.section === 'body') {
+                    const text = data.cell.raw as string;
+
+                    // Stok Tab - Kondisi (Index 4)
+                    if (activeTab === 'stok' && data.column.index === 4) {
+                        if (text === 'Bagus') {
+                            data.cell.styles.textColor = [0, 128, 0]; // Green
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (text === 'Rusak') {
+                            data.cell.styles.textColor = [220, 20, 60]; // Red
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
+
+                    // Peminjaman Tab - Status (Index 4)
+                    if (activeTab === 'peminjaman' && data.column.index === 4) {
+                        if (text === 'dipinjam') {
+                            data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
+                        } else if (text === 'dikembalikan') {
+                            data.cell.styles.textColor = [0, 100, 0]; // Dark Green
+                        }
+                    }
+                }
+            }
         });
 
         doc.save(`Laporan_${activeTab}_${Date.now()}.pdf`);
