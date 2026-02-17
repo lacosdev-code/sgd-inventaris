@@ -407,37 +407,37 @@ const InventarisOrang = () => {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-6 animate-fade-in">
 
       {/* Modern Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 rounded-3xl shadow-modern-lg border border-gray-100/50">
+      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-4 md:p-6 lg:p-8 rounded-2xl md:rounded-3xl shadow-modern-lg border border-gray-100/50">
         <div className="absolute top-0 right-0 w-64 h-64 bg-sgd-100 rounded-full blur-3xl opacity-30 -mr-32 -mt-32"></div>
-        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-sgd-50 rounded-xl">
-              <FaUser className="text-sgd-600 text-xl" />
+        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="p-2 md:p-2.5 bg-sgd-50 rounded-lg md:rounded-xl">
+              <FaUser className="text-sgd-600 text-lg md:text-xl" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Aset Personel</h1>
-              <p className="text-gray-500 mt-1">Aset yang ditugaskan ke personel lapangan</p>
+              <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">Aset Personel</h1>
+              <p className="text-xs md:text-sm text-gray-500 mt-0.5 md:mt-1">Aset yang ditugaskan ke personel lapangan</p>
             </div>
           </div>
-          <div className="flex gap-3 items-center w-full md:w-auto">
+          <div className="flex gap-2 md:gap-3 items-center w-full md:w-auto">
             <div className="relative flex-1 md:w-80 group">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sgd-600 transition-colors text-lg" />
+              <FaSearch className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sgd-600 transition-colors text-base md:text-lg" />
               <input
                 type="text"
                 placeholder="Cari nama personel..."
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50/80 border-2 border-slate-200/50 rounded-2xl focus:border-sgd-400 focus:bg-white outline-none transition-all duration-300 text-sm font-semibold placeholder:text-slate-400 shadow-sm focus:shadow-md"
+                className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2.5 md:py-3.5 text-sm md:text-base bg-slate-50/80 border-2 border-slate-200/50 rounded-xl md:rounded-2xl focus:border-sgd-400 focus:bg-white outline-none transition-all duration-300 font-semibold placeholder:text-slate-400 shadow-sm focus:shadow-md"
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-3.5 bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl whitespace-nowrap"
+              className="flex items-center gap-1.5 md:gap-2 h-10 md:h-12 px-3 md:px-4 bg-[#013220] hover:bg-[#024d30] text-white font-semibold rounded-xl md:rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl whitespace-nowrap text-sm md:text-base"
             >
-              <FaPlus />
-              <span className="hidden md:inline">Tambah Personel</span>
+              <FaPlus className="text-sm md:text-base" />
+              <span className="hidden sm:inline">Tambah Personel</span>
             </button>
           </div>
         </div>
