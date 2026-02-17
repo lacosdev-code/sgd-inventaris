@@ -556,23 +556,23 @@ const InventarisOrang = () => {
       {/* Add Personnel Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-sgd-50 to-white">
-              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                <div className="p-2 bg-sgd-600 rounded-xl text-white">
-                  <FaPlus />
+          <div className="bg-white rounded-2xl md:rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            {/* Modal Header - Fixed */}
+            <div className="p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-sgd-50 to-white flex-shrink-0">
+              <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-slate-900 flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 bg-sgd-600 rounded-lg md:rounded-xl text-white">
+                  <FaPlus className="text-sm md:text-base" />
                 </div>
                 Tambah Personel Baru
               </h2>
-              <p className="text-gray-500 mt-1 ml-14">Tugaskan aset ke personel lapangan</p>
+              <p className="text-xs md:text-sm text-gray-500 mt-1 ml-8 md:ml-14">Tugaskan aset ke personel lapangan</p>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-5">
+            {/* Modal Body - Scrollable */}
+            <div className="p-4 md:p-6 space-y-4 md:space-y-5 overflow-y-auto flex-1">
               {/* Personnel Name */}
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
+                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
                   Nama Personel <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -580,13 +580,13 @@ const InventarisOrang = () => {
                   value={newPersonName}
                   onChange={(e) => setNewPersonName(e.target.value)}
                   placeholder="Contoh: John Doe"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
                 />
               </div>
 
               {/* Item Selection */}
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
+                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
                   Pilih Item dari Master Aset <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -597,7 +597,7 @@ const InventarisOrang = () => {
                     const item = availableItems.find(i => i.id === id);
                     setSelectedItemName(item?.nama || '');
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
                 >
                   <option value="">-- Pilih Item --</option>
                   {availableItems.map(item => (
@@ -609,9 +609,9 @@ const InventarisOrang = () => {
               </div>
 
               {/* Quantity and Condition */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 md:gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
                     Jumlah <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -619,18 +619,18 @@ const InventarisOrang = () => {
                     min="1"
                     value={assignQty}
                     onChange={(e) => setAssignQty(parseInt(e.target.value) || 1)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
                     Kondisi
                   </label>
                   <select
                     value={assignCondition}
                     onChange={(e) => setAssignCondition(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
                   >
                     <option value="Bagus">Bagus</option>
                     <option value="Rusak">Rusak</option>
@@ -640,16 +640,16 @@ const InventarisOrang = () => {
 
               {/* Info Box */}
               {selectedItemId && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-sm text-blue-800">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 md:p-4">
+                  <p className="text-xs md:text-sm text-blue-800">
                     <strong>Info:</strong> Stok di Master Aset akan berkurang sebanyak <strong>{assignQty}</strong> unit setelah disimpan.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end bg-gray-50">
+            {/* Modal Footer - Fixed */}
+            <div className="p-4 md:p-6 border-t border-gray-200 flex gap-2 md:gap-3 justify-end bg-gray-50 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -659,13 +659,13 @@ const InventarisOrang = () => {
                   setAssignQty(1);
                   setAssignCondition('Bagus');
                 }}
-                className="px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all"
+                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all"
               >
                 Batal
               </button>
               <button
                 onClick={handleSavePersonnel}
-                className="px-6 py-3 bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
               >
                 Simpan
               </button>

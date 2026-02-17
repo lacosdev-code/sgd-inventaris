@@ -15,6 +15,7 @@ import Peminjaman from './pages/Peminjaman';
 import ActivityLog from './pages/ActivityLog';
 import DetailAlat from './pages/DetailAlat';
 import Laporan from './pages/Laporan';
+import KondisiAlat from './pages/KondisiAlat';
 
 // --- SIDEBAR COMPONENT ---
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) => {
@@ -157,10 +158,10 @@ const AppContent = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 text-[#1A1A1A] font-sans overflow-hidden">
+    <div className="flex h-screen bg-gray-50 text-[#1A1A1A] font-sans overflow-x-hidden">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setSidebarOpen} />
 
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden">
+      <div className="flex-1 flex flex-col h-full relative overflow-x-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 shrink-0 z-30">
           <NavLink to="/" className="flex items-center gap-3 group/logo cursor-pointer hover:scale-105 transition-transform duration-300">
@@ -180,9 +181,9 @@ const AppContent = () => {
 
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200"
           >
-            <FiMenu size={24} />
+            <FiMenu className="text-xl text-slate-700" />
           </button>
         </header>
 
@@ -194,20 +195,19 @@ const AppContent = () => {
           {isSidebarOpen ? <FiX size={24} /> : <FiMenu size={24} />}
         </button>
 
-        {/* Main Content Area */}
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50">
-          <div className="p-6 md:p-8 w-full">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/utama" element={<InventarisUtama />} />
-              <Route path="/orang" element={<InventarisOrang />} />
-              <Route path="/peminjaman" element={<Peminjaman />} />
-              <Route path="/laporan" element={<Laporan />} />
-              <Route path="/detail/:id" element={<DetailAlat />} />
-              <Route path="/log" element={<ActivityLog />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
+        {/* Main Content - Mobile-First Responsive Padding */}
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 p-4 md:p-6 lg:p-8">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/utama" element={<InventarisUtama />} />
+            <Route path="/orang" element={<InventarisOrang />} />
+            <Route path="/peminjaman" element={<Peminjaman />} />
+            <Route path="/laporan" element={<Laporan />} />
+            <Route path="/log" element={<ActivityLog />} />
+            <Route path="/kondisi" element={<KondisiAlat />} />
+            <Route path="/detail/:id" element={<DetailAlat />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </div>
     </div>
