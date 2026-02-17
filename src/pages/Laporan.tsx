@@ -183,25 +183,69 @@ const Laporan = () => {
             didParseCell: (data) => {
                 // Color Coding Logic
                 if (data.section === 'body') {
-                    const text = data.cell.raw as string;
+                    const text = (data.cell.raw as string) || '';
+                    const textLower = text.toLowerCase();
 
-                    // Stok Tab - Kondisi (Index 4)
-                    if (activeTab === 'stok' && data.column.index === 4) {
-                        if (text === 'Bagus') {
-                            data.cell.styles.textColor = [0, 128, 0]; // Green
+                    // --- STOK TAB ---
+                    if (activeTab === 'stok') {
+                        // Lokasi (Index 3)
+                        if (data.column.index === 3) {
+                            if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105]; // DimGray
+                            else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180]; // Strong Blue
+                            else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45]; // Sienna (Brownish)
+                            else if (textLower.includes('produksi')) data.cell.styles.textColor = [200, 100, 0]; // Dark Orange
+                            else if (textLower.includes('pos')) data.cell.styles.textColor = [75, 0, 130]; // Indigo
+                            else data.cell.styles.textColor = [0, 0, 0]; // Default
+                        }
+
+                        // Kondisi (Index 4)
+                        if (data.column.index === 4) {
                             data.cell.styles.fontStyle = 'bold';
-                        } else if (text === 'Rusak') {
-                            data.cell.styles.textColor = [220, 20, 60]; // Red
-                            data.cell.styles.fontStyle = 'bold';
+                            if (textLower.includes('bagus') || textLower.includes('baik')) {
+                                data.cell.styles.textColor = [0, 128, 0]; // Green
+                            } else if (textLower.includes('rusak ringan')) {
+                                data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
+                            } else if (textLower.includes('rusak berat') || textLower.includes('rusak')) {
+                                data.cell.styles.textColor = [220, 20, 60]; // Red
+                            } else if (textLower.includes('perlu perbaikan')) {
+                                data.cell.styles.textColor = [147, 112, 219]; // MediumPurple
+                            } else if (textLower.includes('hilang')) {
+                                data.cell.styles.textColor = [128, 128, 128]; // Gray
+                            }
                         }
                     }
 
-                    // Peminjaman Tab - Status (Index 4)
+                    // --- PEMINJAMAN TAB ---
                     if (activeTab === 'peminjaman' && data.column.index === 4) {
-                        if (text === 'dipinjam') {
+                        data.cell.styles.fontStyle = 'bold';
+                        if (textLower === 'dipinjam') {
                             data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
-                        } else if (text === 'dikembalikan') {
+                        } else if (textLower === 'dikembalikan') {
                             data.cell.styles.textColor = [0, 100, 0]; // Dark Green
+                        } else if (textLower === 'terlambat') {
+                            data.cell.styles.textColor = [220, 20, 60]; // Red
+                        }
+                    }
+
+                    // --- MAINTENANCE TAB ---
+                    if (activeTab === 'maintenance') {
+                        // Lokasi (Index 1)
+                        if (data.column.index === 1) {
+                            if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105];
+                            else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180];
+                            else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45];
+                            else data.cell.styles.textColor = [0, 0, 0];
+                        }
+                        // Kondisi (Index 2)
+                        if (data.column.index === 2) {
+                            data.cell.styles.fontStyle = 'bold';
+                            if (textLower.includes('bagus')) data.cell.styles.textColor = [0, 128, 0];
+                            else if (textLower.includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
+                        }
+                        // Status Jadwal (Index 4) - handled in map but let's color text too
+                        if (data.column.index === 4) {
+                            if (textLower.includes('lewat')) data.cell.styles.textColor = [220, 20, 60];
+                            else if (textLower.includes('aman')) data.cell.styles.textColor = [0, 128, 0];
                         }
                     }
                 }
@@ -448,6 +492,51 @@ const Laporan = () => {
                     </div>
                 )}
             </div>
+
+            {/* PDF PREVIEW MODAL */}
+            {showPdfPreview && pdfUrl && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl animate-fade-in-up">
+                        <div className="flex justify-between items-center p-4 border-b">
+                            <h3 className="text-xl font-bold text-slate-800">Preview Laporan PDF</h3>
+                            <button
+                                onClick={() => setShowPdfPreview(false)}
+                                className="p-2 hover:bg-slate-100 rounded-full transition"
+                            >
+                                <FiX size={24} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
+                            <iframe
+                                src={pdfUrl}
+                                className="w-full h-full rounded-lg shadow-inner"
+                                title="PDF Preview"
+                            />
+                        </div>
+
+                        <div className="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
+                            <button
+                                onClick={() => setShowPdfPreview(false)}
+                                className="px-5 py-2 text-slate-600 font-semibold hover:bg-slate-50 rounded-lg transition"
+                            >
+                                Tutup
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const a = document.createElement('a');
+                                    a.href = pdfUrl;
+                                    a.download = `Laporan_${activeTab}_${Date.now()}.pdf`;
+                                    a.click();
+                                }}
+                                className="px-5 py-2 bg-red-600 text-white font-bold rounded-lg shadow-lg hover:bg-red-700 transition flex items-center gap-2"
+                            >
+                                <FaFilePdf /> Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
