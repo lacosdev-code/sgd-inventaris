@@ -15,6 +15,14 @@ export const uploadImage = async (file: File): Promise<string> => {
   formData.append('useUniqueFileName', 'true');
   formData.append('folder', '/sgd_inventaris');
 
+  console.log("ImageKit Upload Debug:", {
+    file: file.name,
+    type: file.type,
+    size: file.size,
+    key: PUBLIC_KEY ? `${PUBLIC_KEY.substring(0, 5)}...` : 'MISSING',
+    endpoint: UPLOAD_API_URL
+  });
+
   try {
     const response = await fetch(UPLOAD_API_URL, {
       method: 'POST',
