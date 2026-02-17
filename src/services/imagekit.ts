@@ -1,6 +1,7 @@
 // Configuration from Prompt
-const IK_ENDPOINT = import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT;
+const IK_ENDPOINT = import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT; // For display/transformation base if needed
 const PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY;
+const UPLOAD_API_URL = "https://upload.imagekit.io/api/v1/files/upload";
 
 export const uploadImage = async (file: File): Promise<string> => {
   const formData = new FormData();
@@ -11,7 +12,7 @@ export const uploadImage = async (file: File): Promise<string> => {
   formData.append('folder', '/sgd_inventaris');
 
   try {
-    const response = await fetch(IK_ENDPOINT, {
+    const response = await fetch(UPLOAD_API_URL, {
       method: 'POST',
       body: formData,
       // Note: Client-side upload usually restricts usage without signature.
@@ -20,7 +21,11 @@ export const uploadImage = async (file: File): Promise<string> => {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 403) {
+        throw new Error(`Upload Failed: Forbidden (403). Please enable "Unsigned uploading" in your ImageKit Dashboard > Settings > Upload.`);
+      }
+      throw new Error(`Upload failed: ${errorData.message || response.statusText}`);
     }
 
     const data = await response.json();
