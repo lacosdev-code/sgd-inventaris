@@ -1,0 +1,352 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../services/supabase';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
+import {
+    FaFilePdf, FaFileExcel, FaChartBar, FaCalendarAlt,
+    FaBox, FaExchangeAlt, FaTools, FaSearch
+} from 'react-icons/fa';
+
+const Laporan = () => {
+    const [activeTab, setActiveTab] = useState('stok'); // stok, peminjaman, maintenance
+    const [inventory, setInventory] = useState<any[]>([]);
+    const [loans, setLoans] = useState<any[]>([]);
+    const [maintenanceItems, setMaintenanceItems] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Date Filter
+    const [startDate, setStartDate] = useState(
+        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+    );
+    const [endDate, setEndDate] = useState(
+        new Date().toISOString().split('T')[0]
+    );
+
+    useEffect(() => {
+        fetchData();
+    }, [activeTab, startDate, endDate]);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            if (activeTab === 'stok') {
+                const { data, error } = await supabase.from('inventaris_utama').select('*');
+                if (error) throw error;
+                setInventory(data || []);
+            }
+            else if (activeTab === 'peminjaman') {
+                const { data, error } = await supabase
+                    .from('peminjaman')
+                    .select('*')
+                    .gte('tanggal_pinjam', startDate)
+                    .lte('tanggal_pinjam', endDate)
+                    .order('tanggal_pinjam', { ascending: false });
+                if (error) throw error;
+                setLoans(data || []);
+            }
+            else if (activeTab === 'maintenance') {
+                const { data, error } = await supabase
+                    .from('inventaris_utama')
+                    .select('*')
+                    .not('jadwal_servis_berikutnya', 'is', null)
+                    .order('jadwal_servis_berikutnya', { ascending: true });
+                if (error) throw error;
+
+                // Filter items that actually have maintenance dates
+                setMaintenanceItems(data || []);
+            }
+        } catch (error) {
+            console.error("Error fetching report data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- EXPORT FUNCTIONS ---
+
+    const exportPDF = () => {
+        const doc = new jsPDF();
+        const title = activeTab === 'stok' ? 'Laporan Stok Aset' :
+            activeTab === 'peminjaman' ? 'Laporan Peminjaman' : 'Jadwal Maintenance';
+
+        // Header
+        doc.setFontSize(18);
+        doc.text('PT. SUNGGIARDI CORPORATION', 14, 22);
+        doc.setFontSize(14);
+        doc.text(title, 14, 32);
+        doc.setFontSize(10);
+        doc.text(`Dicetak pada: ${format(new Date(), 'dd MMM yyyy HH:mm', { locale: idLocale })}`, 14, 40);
+
+        if (activeTab === 'peminjaman') {
+            doc.text(`Periode: ${startDate} s/d ${endDate}`, 14, 46);
+        }
+
+        let head = [];
+        let body = [];
+
+        if (activeTab === 'stok') {
+            head = [['Kode', 'Nama Alat', 'Kategori', 'Lokasi', 'Kondisi', 'Jumlah']];
+            body = inventory.map(item => [
+                item.kode_alat, item.nama, item.kategori, item.lokasi, item.kondisi,
+                `${item.jumlah_tersedia}/${item.jumlah}`
+            ]);
+        } else if (activeTab === 'peminjaman') {
+            head = [['Peminjam', 'Alat', 'Tgl Pinjam', 'Tgl Kembali', 'Status']];
+            body = loans.map(loan => [
+                loan.nama_peminjam, loan.nama_barang,
+                format(new Date(loan.tanggal_pinjam), 'dd/MM/yy'),
+                loan.tanggal_kembali ? format(new Date(loan.tanggal_kembali), 'dd/MM/yy') : '-',
+                loan.status
+            ]);
+        } else {
+            head = [['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
+            body = maintenanceItems.map(item => [
+                item.nama, item.lokasi,
+                item.jadwal_servis_berikutnya ? format(new Date(item.jadwal_servis_berikutnya), 'dd MMM yyyy', { locale: idLocale }) : '-',
+                item.kondisi
+            ]);
+        }
+
+        autoTable(doc, {
+            startY: 50,
+            head: head,
+            body: body,
+            theme: 'grid',
+            headStyles: { fillColor: [1, 50, 32] }, // SGD Green
+        });
+
+        doc.save(`Laporan_${activeTab}_${Date.now()}.pdf`);
+    };
+
+    const exportExcel = () => {
+        let data = [];
+        let fileName = `Laporan_${activeTab}`;
+
+        if (activeTab === 'stok') {
+            data = inventory.map(item => ({
+                'Kode Alat': item.kode_alat,
+                'Nama': item.nama,
+                'Kategori': item.kategori,
+                'Lokasi': item.lokasi,
+                'Kondisi': item.kondisi,
+                'Total': item.jumlah,
+                'Tersedia': item.jumlah_tersedia
+            }));
+        } else if (activeTab === 'peminjaman') {
+            data = loans.map(loan => ({
+                'Peminjam': loan.nama_peminjam,
+                'Barang': loan.nama_barang,
+                'Tgl Pinjam': loan.tanggal_pinjam,
+                'Tgl Kembali': loan.tanggal_kembali,
+                'Catatan': loan.catatan,
+                'Status': loan.status
+            }));
+        } else {
+            data = maintenanceItems.map(item => ({
+                'Nama Alat': item.nama,
+                'Lokasi': item.lokasi,
+                'Kondisi Saat Ini': item.kondisi,
+                'Jadwal Servis': item.jadwal_servis_berikutnya
+            }));
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, activeTab);
+        XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 w-full animate-fade-in pb-20">
+
+            {/* HEADER */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+                        <FaChartBar className="text-[#013220]" /> Laporan & Analitik
+                    </h1>
+                    <p className="text-slate-500">Unduh laporan resmi untuk audit dan manajemen.</p>
+                </div>
+
+                <div className="flex gap-3">
+                    <button
+                        onClick={exportExcel}
+                        className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 transition shadow-sm font-semibold"
+                    >
+                        <FaFileExcel /> Excel
+                    </button>
+                    <button
+                        onClick={exportPDF}
+                        className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition shadow-sm font-semibold"
+                    >
+                        <FaFilePdf /> PDF
+                    </button>
+                </div>
+            </div>
+
+            {/* FILTER & CONTROLS */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
+
+                {/* Tabs */}
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                        onClick={() => setActiveTab('stok')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stok' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <div className="flex items-center gap-2"><FaBox /> Stok Aset</div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('peminjaman')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'peminjaman' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <div className="flex items-center gap-2"><FaExchangeAlt /> Peminjaman</div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('maintenance')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'maintenance' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <div className="flex items-center gap-2"><FaTools /> Maintenance</div>
+                    </button>
+                </div>
+
+                {/* Date Filter (Only for Peminjaman) */}
+                {activeTab === 'peminjaman' && (
+                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+                        <FaCalendarAlt className="text-slate-400" />
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="bg-transparent border-none text-sm font-medium focus:ring-0 text-slate-700"
+                        />
+                        <span className="text-slate-400">-</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="bg-transparent border-none text-sm font-medium focus:ring-0 text-slate-700"
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* DATA TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[400px]">
+                {loading ? (
+                    <div className="flex items-center justify-center h-64 text-slate-400">Loading data...</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-bold">
+                                <tr>
+                                    {activeTab === 'stok' && (
+                                        <>
+                                            <th className="px-6 py-4">Kode</th>
+                                            <th className="px-6 py-4">Nama Alat</th>
+                                            <th className="px-6 py-4">Kategori</th>
+                                            <th className="px-6 py-4">Lokasi</th>
+                                            <th className="px-6 py-4">Kondisi</th>
+                                            <th className="px-6 py-4 text-center">Stok</th>
+                                        </>
+                                    )}
+                                    {activeTab === 'peminjaman' && (
+                                        <>
+                                            <th className="px-6 py-4">Peminjam</th>
+                                            <th className="px-6 py-4">Barang</th>
+                                            <th className="px-6 py-4">Tgl Pinjam</th>
+                                            <th className="px-6 py-4">Tgl Kembali</th>
+                                            <th className="px-6 py-4">Status</th>
+                                        </>
+                                    )}
+                                    {activeTab === 'maintenance' && (
+                                        <>
+                                            <th className="px-6 py-4">Nama Alat</th>
+                                            <th className="px-6 py-4">Lokasi</th>
+                                            <th className="px-6 py-4">Kondisi Saat Ini</th>
+                                            <th className="px-6 py-4">Jadwal Servis</th>
+                                            <th className="px-6 py-4">Status Jadwal</th>
+                                        </>
+                                    )}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {activeTab === 'stok' && inventory.map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-50/50 transition">
+                                        <td className="px-6 py-4 text-xs font-mono text-slate-500">{item.kode_alat}</td>
+                                        <td className="px-6 py-4 font-bold text-slate-800">{item.nama}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">{item.kategori}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">{item.lokasi}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${item.kondisi === 'Bagus' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                }`}>
+                                                {item.kondisi}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center font-mono font-bold text-slate-700">
+                                            {item.jumlah_tersedia} / {item.jumlah}
+                                        </td>
+                                    </tr>
+                                ))}
+
+                                {activeTab === 'peminjaman' && loans.map((loan) => (
+                                    <tr key={loan.id} className="hover:bg-slate-50/50 transition">
+                                        <td className="px-6 py-4 font-bold text-slate-800">{loan.nama_peminjam}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">{loan.nama_barang}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                            {format(new Date(loan.tanggal_pinjam), 'dd MMM yyyy', { locale: idLocale })}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                            {loan.tanggal_kembali ? format(new Date(loan.tanggal_kembali), 'dd MMM yyyy', { locale: idLocale }) : '-'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${loan.status === 'dipinjam' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                                                }`}>
+                                                {loan.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+
+                                {activeTab === 'maintenance' && maintenanceItems.map((item) => {
+                                    const isLate = new Date(item.jadwal_servis_berikutnya) < new Date();
+                                    return (
+                                        <tr key={item.id} className="hover:bg-slate-50/50 transition">
+                                            <td className="px-6 py-4 font-bold text-slate-800">{item.nama}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">{item.lokasi}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">{item.kondisi}</td>
+                                            <td className="px-6 py-4 font-mono text-slate-700">
+                                                {item.jadwal_servis_berikutnya ? format(new Date(item.jadwal_servis_berikutnya), 'dd MMM yyyy', { locale: idLocale }) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {isLate ? (
+                                                    <span className="flex items-center gap-1 text-red-600 font-bold text-xs">
+                                                        <FaSearch /> Lewat Jadwal
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-green-600 font-bold text-xs">Aman</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                                {((activeTab === 'stok' && inventory.length === 0) ||
+                                    (activeTab === 'peminjaman' && loans.length === 0) ||
+                                    (activeTab === 'maintenance' && maintenanceItems.length === 0)) && (
+                                        <tr>
+                                            <td colSpan={6} className="py-20 text-center text-slate-400">Tidak ada data untuk ditampilkan.</td>
+                                        </tr>
+                                    )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default Laporan;

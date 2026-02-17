@@ -3,7 +3,7 @@ import { HashRouter as Router, Routes, Route, NavLink, Navigate } from 'react-ro
 import { supabase, seedDatabase } from './services/supabase';
 import {
   FiGrid, FiBox, FiUsers, FiRepeat, FiClock,
-  FiLogOut, FiMenu, FiX, FiTool
+  FiLogOut, FiMenu, FiX, FiTool, FiPieChart
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
@@ -15,7 +15,8 @@ import InventarisOrang from './pages/InventarisOrang';
 import Peminjaman from './pages/Peminjaman';
 import ActivityLog from './pages/ActivityLog';
 import KondisiAlat from './pages/KondisiAlat';
-import DetailAlat from './pages/DetailAlat'; // Import Detail Page
+import DetailAlat from './pages/DetailAlat';
+import Laporan from './pages/Laporan';
 
 // --- SIDEBAR COMPONENT ---
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) => {
@@ -32,8 +33,6 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
         timer: 1500,
         showConfirmButton: false
       });
-      // Tidak perlu navigasi manual, onAuthStateChange di App.tsx 
-      // akan otomatis melempar kamu ke halaman Login.
     }
   };
 
@@ -42,7 +41,8 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
     { path: '/utama', name: 'Inventaris Utama', icon: <FiBox /> },
     { path: '/orang', name: 'Inventaris Orang', icon: <FiUsers /> },
     { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat /> },
-    { path: '/kondisi', name: 'Kondisi & Serah Terima', icon: <FiTool /> }, // New Menu Item
+    { path: '/kondisi', name: 'Kondisi & Serah Terima', icon: <FiTool /> },
+    { path: '/laporan', name: 'Laporan', icon: <FiPieChart /> },
     { path: '/log', name: 'Log Aktivitas', icon: <FiClock /> },
   ];
 
@@ -61,9 +61,8 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full p-6">
-          {/* LOGO AREA - Branding Sunggiardi - Clickable to Dashboard */}
+          {/* LOGO AREA */}
           <NavLink to="/" className="mb-10 flex items-center gap-3 group/logo cursor-pointer hover:scale-105 transition-transform duration-300">
-            {/* Logo Icon Box */}
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-sgd-500/20 relative overflow-hidden group p-2 transition-all duration-500 group-hover/logo:rotate-2 logo-glow">
               <img
                 src="https://ik.imagekit.io/Sgd/Logo%20Potrait.png"
@@ -72,15 +71,9 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
               />
               <div className="absolute inset-0 bg-gradient-to-tr from-sgd-400/10 to-transparent group-hover:bg-sgd-400/20 transition"></div>
             </div>
-
-            {/* Logo Text */}
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white leading-tight">
-                SUNGGIARDI
-              </h1>
-              <p className="text-[10px] text-sgd-400 font-medium uppercase tracking-[0.2em]">
-                Corporation
-              </p>
+              <h1 className="text-xl font-bold tracking-tight text-white leading-tight">SUNGGIARDI</h1>
+              <p className="text-[10px] text-sgd-400 font-medium uppercase tracking-[0.2em]">Corporation</p>
             </div>
           </NavLink>
 
@@ -94,8 +87,8 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
                 className={({ isActive }) => `
                   group flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 ease-out border border-transparent
                   ${isActive
-                    ? 'bg-sgd-500 text-white shadow-lg shadow-sgd-500/30'  // AKTIF: Emas Menyala
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-sgd-400 hover:border-slate-700'} // HOVER: Gelap dgn Text Emas
+                    ? 'bg-sgd-500 text-white shadow-lg shadow-sgd-500/30'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-sgd-400 hover:border-slate-700'}
                 `}
               >
                 {({ isActive }) => (
@@ -104,8 +97,6 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
                       {link.icon}
                     </span>
                     <span className="font-medium text-sm tracking-wide">{link.name}</span>
-
-                    {/* Indikator Aktif (Titik Emas di kanan) */}
                     {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                   </>
                 )}
@@ -113,7 +104,7 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
             ))}
           </nav>
 
-          {/* FOOTER - Logout */}
+          {/* FOOTER */}
           <div className="mt-auto pt-6 border-t border-slate-800">
             <button
               onClick={handleLogout}
@@ -136,7 +127,6 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    // Check session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -147,7 +137,6 @@ const AppContent = () => {
       setLoading(false);
     });
 
-    // Run seeding
     seedDatabase();
 
     return () => subscription.unsubscribe();
@@ -177,9 +166,7 @@ const AppContent = () => {
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 shrink-0 z-30">
-          {/* Clickable Logo - Same as Desktop */}
           <NavLink to="/" className="flex items-center gap-3 group/logo cursor-pointer hover:scale-105 transition-transform duration-300">
-            {/* Logo Icon Box - Original Gold Colors */}
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-sgd-500/20 relative overflow-hidden p-1.5 transition-all duration-500 group-hover/logo:rotate-2 logo-glow border border-gray-200">
               <img
                 src="https://ik.imagekit.io/Sgd/Logo%20Potrait.png"
@@ -188,7 +175,6 @@ const AppContent = () => {
               />
               <div className="absolute inset-0 bg-gradient-to-tr from-sgd-400/10 to-transparent group-hover/logo:bg-sgd-400/20 transition"></div>
             </div>
-            {/* Logo Text */}
             <div className="flex flex-col">
               <span className="font-bold text-slate-900 tracking-tight leading-none text-sm">SUNGGIARDI</span>
               <span className="text-[9px] text-sgd-500 font-medium uppercase tracking-widest mt-0.5">Corporation</span>
@@ -220,7 +206,8 @@ const AppContent = () => {
               <Route path="/orang" element={<InventarisOrang />} />
               <Route path="/peminjaman" element={<Peminjaman />} />
               <Route path="/kondisi" element={<KondisiAlat />} />
-              <Route path="/detail/:id" element={<DetailAlat />} /> {/* New Dynamic Route */}
+              <Route path="/laporan" element={<Laporan />} />
+              <Route path="/detail/:id" element={<DetailAlat />} />
               <Route path="/log" element={<ActivityLog />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
