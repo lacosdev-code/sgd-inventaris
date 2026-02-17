@@ -6,7 +6,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload, FiEdit, FiImage } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
-// Import QRScanner
 import QRScanner from '../components/Inventaris/QRScanner';
 
 const InventarisUtama = () => {
@@ -15,7 +14,6 @@ const InventarisUtama = () => {
   const [showScanner, setShowScanner] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fungsi Import dari Excel
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -25,23 +23,19 @@ const InventarisUtama = () => {
       try {
         const bstr = event.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0]; // Ambil sheet pertama
+        const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-
-        // Ubah data excel jadi JSON
         const data = XLSX.utils.sheet_to_json(ws);
 
-        // Format data agar sesuai dengan kolom tabel database kita
         const formattedData = data.map((row: any) => ({
           nama: row['Nama'],
           jumlah: parseInt(row['Jumlah']) || 0,
-          jumlah_tersedia: parseInt(row['Jumlah']) || 0, // Awal masuk, tersedia = jumlah total
+          jumlah_tersedia: parseInt(row['Jumlah']) || 0,
           kondisi: row['Kondisi']?.toLowerCase() || 'bagus',
           lokasi: row['Lokasi'] || '-',
           kode_alat: row['Kode Alat']
         }));
 
-        // Validasi: Pastikan ada kode_alat agar tidak error
         const validData = formattedData.filter(item => item.kode_alat);
 
         if (validData.length === 0) {
@@ -49,7 +43,6 @@ const InventarisUtama = () => {
           return;
         }
 
-        // Tembak ke Supabase menggunakan Bulk Upsert
         const { error } = await supabase
           .from('inventaris_utama')
           .upsert(validData, { onConflict: 'kode_alat' });
@@ -57,20 +50,15 @@ const InventarisUtama = () => {
         if (error) throw error;
 
         Swal.fire('Berhasil!', `${validData.length} barang sukses di-import ke sistem.`, 'success');
-
-        // Refresh tabel
         window.location.reload();
       } catch (error: any) {
         Swal.fire('Gagal Import', error.message, 'error');
       }
     };
     reader.readAsBinaryString(file);
-
-    // Reset input file agar bisa import file yang sama lagi jika perlu
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Fungsi Download Template Kosong
   const downloadTemplate = () => {
     const templateData = [
       {
@@ -100,15 +88,40 @@ const InventarisUtama = () => {
     });
   };
 
-  // Fungsi Tambah / Edit Item
   const handleAddOrEdit = async (itemToEdit?: any) => {
     const isEdit = !!itemToEdit;
     const title = isEdit ? '✏️ Edit Item' : '➕ Tambah Item Baru';
     const confirmText = isEdit ? '💾 Simpan Perubahan' : '💾 Simpan Item';
 
+    const previewScript = `
+      window.handleFileSelect = function(input) {
+        const container = document.getElementById('preview-container');
+        container.innerHTML = '';
+        const files = Array.from(input.files);
+        
+        if (files.length > 0) {
+           document.getElementById('file-label').innerText = files.length + " Foto Dipilih";
+           files.forEach(file => {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                 const img = document.createElement('img');
+                 img.src = e.target.result;
+                 img.className = 'w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm flex-shrink-0';
+                 container.appendChild(img);
+              }
+              reader.readAsDataURL(file);
+           });
+           container.classList.remove('hidden');
+        } else {
+           container.classList.add('hidden');
+        }
+      }
+    `;
+
     const { value: formValues } = await Swal.fire({
       title: `<span class="text-2xl font-black text-slate-900">${title}</span>`,
       html: `
+        <script>${previewScript}</script>
         <div class="text-left space-y-4 p-2">
           ${isEdit ? `<input type="hidden" id="sw-id" value="${itemToEdit.id}">` : ''}
           
@@ -149,12 +162,15 @@ const InventarisUtama = () => {
           </div>
 
           <div>
-             <label class="block text-sm font-bold text-slate-700 mb-2">Foto Barang</label>
+             <label class="block text-sm font-bold text-slate-700 mb-2">Foto Barang (Bisa banyak)</label>
              <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors relative group">
-                ${itemToEdit?.foto_url ? `<img src="${itemToEdit.foto_url}" class="h-20 w-auto mx-auto mb-2 rounded-lg" />` : '<FiImage class="mx-auto text-2xl mb-2" />'}
-                <span class="text-xs font-semibold" id="file-label text-slate-500">${itemToEdit?.foto_url ? 'Ganti Foto' : 'Upload Foto'}'}</span>
-                <input type="file" id="sw-foto" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onchange="document.getElementById('file-label').innerText = this.files[0].name; document.getElementById('preview-container').style.display='none';">
-                <div id="preview-container"></div>
+                <FiImage class="mx-auto text-2xl mb-2" />
+                <span class="text-xs font-semibold" id="file-label">${itemToEdit?.foto_url ? 'Ganti Foto Utama + Galeri' : 'Upload Foto (Max 5)'}</span>
+                <input type="file" id="sw-foto" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" multiple onchange="window.handleFileSelect(this)">
+             </div>
+             
+             <div id="preview-container" class="flex gap-2 mt-3 overflow-x-auto p-1 ${itemToEdit?.foto_url ? '' : 'hidden'}">
+                 ${itemToEdit?.foto_url ? `<img src="${itemToEdit.foto_url}" class="w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm flex-shrink-0" title="Foto Utama Saat Ini">` : ''}
              </div>
           </div>
 
@@ -170,10 +186,11 @@ const InventarisUtama = () => {
         const nama = (document.getElementById('sw-nama') as HTMLInputElement).value;
         const kode = (document.getElementById('sw-kode') as HTMLInputElement).value;
         const jumlah = parseInt((document.getElementById('sw-jumlah') as HTMLInputElement).value);
-        const tersedia = parseInt((document.getElementById('sw-tersedia') as HTMLInputElement).value); // Allow editing available stock separately if needed
+        const tersedia = parseInt((document.getElementById('sw-tersedia') as HTMLInputElement).value);
         const kondisi = (document.getElementById('sw-kondisi') as HTMLSelectElement).value;
         const lokasi = (document.getElementById('sw-lokasi') as HTMLInputElement).value || '-';
-        const fotoFile = (document.getElementById('sw-foto') as HTMLInputElement).files?.[0];
+        const fileInput = (document.getElementById('sw-foto') as HTMLInputElement);
+        const files = fileInput.files;
 
         if (!nama || !kode || isNaN(jumlah)) {
           Swal.showValidationMessage('Nama, Kode, dan Jumlah wajib diisi!');
@@ -184,50 +201,94 @@ const InventarisUtama = () => {
           nama,
           kode_alat: kode,
           jumlah,
-          jumlah_tersedia: isNaN(tersedia) ? jumlah : tersedia, // If empty, default to total
+          jumlah_tersedia: isNaN(tersedia) ? jumlah : tersedia,
           kondisi,
           lokasi,
-          fotoFile
+          files: files && files.length > 0 ? Array.from(files) : []
         };
       }
     });
 
     if (formValues) {
       try {
-        let photoUrl = itemToEdit?.foto_url || null;
+        Swal.fire({
+          title: 'Memproses Data...',
+          html: 'Menyimpan info alat dan mengupload foto...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading()
+        });
 
-        if (formValues.fotoFile) {
-          Swal.fire({
-            title: 'Mengupload Foto...',
-            text: 'Mohon tunggu sebentar',
-            allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
-          });
+        let mainPhotoUrl = itemToEdit?.foto_url || null;
+        let uploadedUrls: string[] = [];
 
-          // Gunakan Server Action Adapter
+        if (formValues.files.length > 0) {
           const formData = new FormData();
-          formData.append('file', formValues.fotoFile);
+          formValues.files.forEach((file: File) => {
+            formData.append('files', file);
+          });
 
           const uploadRes = await uploadToolImage(formData);
 
-          if (!uploadRes.success || !uploadRes.url) {
+          if (!uploadRes.success || !uploadRes.urls) {
             throw new Error(uploadRes.error || "Gagal upload foto");
           }
-          photoUrl = uploadRes.url;
+          uploadedUrls = uploadRes.urls;
 
-          Swal.close();
+          if (!mainPhotoUrl && uploadedUrls.length > 0) {
+            mainPhotoUrl = uploadedUrls[0];
+          }
+          if (isEdit && formValues.files.length > 0) {
+            mainPhotoUrl = uploadedUrls[0];
+          }
         }
 
         const payload = {
-          ...formValues,
-          foto_url: photoUrl
+          nama: formValues.nama,
+          kode_alat: formValues.kode_alat,
+          jumlah: formValues.jumlah,
+          jumlah_tersedia: formValues.jumlah_tersedia,
+          kondisi: formValues.kondisi,
+          lokasi: formValues.lokasi,
+          foto_url: mainPhotoUrl
         };
-        delete payload.fotoFile; // Don't send file object to Supabase
 
-        await upsertItem(payload);
+        const { data: toolData, error: toolError } = await supabase
+          .from('inventaris_utama')
+          .upsert(isEdit ? { ...payload, id: itemToEdit.id } : payload)
+          .select()
+          .single();
 
-        // Success handled by upsertItem or useInventaris, but we can double check
-        // useInventaris usually handles alert, but let's be safe.
+        if (toolError) throw toolError;
+        if (!toolData) throw new Error("Gagal menyimpan data alat.");
+
+        const toolId = toolData.id;
+
+        if (uploadedUrls.length > 0) {
+          const imageRecords = uploadedUrls.map(url => ({
+            tool_id: toolId,
+            image_url: url
+          }));
+
+          const { error: imgError } = await supabase
+            .from('tool_images')
+            .insert(imageRecords);
+
+          if (imgError) {
+            console.error("Error linking images:", imgError);
+            Swal.fire('Info', 'Alat disimpan, tapi gagal link foto ke galeri.', 'warning');
+            return;
+          }
+        }
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Berhasil!',
+          text: 'Data alat dan foto berhasil disimpan.',
+          timer: 1500,
+          showConfirmButton: false
+        });
+
+        window.location.reload();
 
       } catch (error: any) {
         Swal.fire({
@@ -284,7 +345,6 @@ const InventarisUtama = () => {
             <span className="hidden sm:inline font-bold text-sm">Scan QR</span>
           </button>
 
-          {/* Tombol Template */}
           <button
             onClick={downloadTemplate}
             className="group bg-white border-2 border-slate-200/50 text-slate-700 hover:border-sgd-400 hover:text-sgd-700 px-5 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-sm hover:shadow-md active:scale-95"
@@ -300,7 +360,6 @@ const InventarisUtama = () => {
             ref={fileInputRef}
             onChange={handleImportExcel}
           />
-          {/* Tombol Import */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-5 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg hover:shadow-xl active:scale-95 group"
@@ -310,7 +369,6 @@ const InventarisUtama = () => {
             <span className="font-bold text-sm relative z-10">Import Excel</span>
           </button>
 
-          {/* Tombol Tambah */}
           <button
             onClick={() => handleAddOrEdit()}
             className="relative overflow-hidden bg-gold-gradient text-white px-6 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group"

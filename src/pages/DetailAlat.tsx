@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { FiArrowLeft, FiTool, FiCheckCircle, FiAlertTriangle, FiXCircle, FiSave, FiClock, FiMapPin, FiBox, FiChevronRight } from 'react-icons/fi';
+import { FiArrowLeft, FiTool, FiCheckCircle, FiBox, FiMapPin, FiSave } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -11,6 +11,8 @@ const DetailAlat = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [item, setItem] = useState<any>(null);
+    const [images, setImages] = useState<string[]>([]);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,15 +20,23 @@ const DetailAlat = () => {
     const fetchItemDetails = async () => {
         try {
             setLoading(true);
+
+            // 1. Fetch Item + Related Images
             const { data, error } = await supabase
                 .from('inventaris_utama')
-                .select('*')
+                .select('*, tool_images(image_url)')
                 .or(`kode_alat.eq.${id},id.eq.${id}`)
                 .single();
 
             if (error) throw error;
             setItem(data);
 
+            // 2. Prepare Images Array (Main Photo first, then gallery)
+            const gallery = data.tool_images?.map((img: any) => img.image_url) || [];
+            const allImages = data.foto_url ? [data.foto_url, ...gallery.filter((url: string) => url !== data.foto_url)] : gallery;
+            setImages(allImages);
+
+            // 3. Fetch Logs
             const { data: logData } = await supabase
                 .from('peminjaman')
                 .select('*')
@@ -42,7 +52,7 @@ const DetailAlat = () => {
                         teknisi: l.peminjam,
                         type: l.status === 'dipinjam' ? 'Pinjam' : 'Kembali',
                         condition: l.status === 'dipinjam' ? l.kondisi_pinjam : l.kondisi_kembali,
-                        status: l.status // keep original for logic if needed
+                        status: l.status
                     }
                 }));
                 setLogs(mappedLogs);
@@ -83,7 +93,7 @@ const DetailAlat = () => {
     return (
         <div className="min-h-screen bg-[#F5F5F7] text-slate-900 font-sans selection:bg-slate-200 pb-32">
 
-            {/* Navbar / Header */}
+            {/* Navbar */}
             <div className="fixed top-0 w-full z-20 px-6 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between transition-all">
                 <button
                     onClick={() => navigate('/utama')}
@@ -95,32 +105,40 @@ const DetailAlat = () => {
                     <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Inventory</span>
                     <span className="text-sm font-semibold tracking-tight text-slate-800">Detail Alat</span>
                 </div>
-                <div className="w-10"></div> {/* Spacer for balance */}
+                <div className="w-10"></div>
             </div>
 
-            {/* Spacer for Fixed Header */}
             <div className="h-24"></div>
 
-            {/* Main Content Area */}
             <div className="px-6 max-w-md mx-auto space-y-6">
 
-                {/* 1. Main Card - Apple Style */}
-                <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]">
+                {/* 1. Main Card with Carousel */}
+                <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
 
-                    {/* Hero Image */}
-                    <div className="h-64 bg-slate-50 relative group">
-                        {item.foto_url ? (
-                            <img src={item.foto_url} alt={item.nama} className="w-full h-full object-cover" />
+                    {/* Carousel Container */}
+                    <div className="relative group aspect-[4/3] bg-slate-100">
+                        {images.length > 0 ? (
+                            <div className="w-full h-full overflow-x-auto snap-x snap-mandatory flex hide-scrollbar scroll-smooth"
+                                onScroll={(e) => {
+                                    const scrollLeft = e.currentTarget.scrollLeft;
+                                    const width = e.currentTarget.offsetWidth;
+                                    const index = Math.round(scrollLeft / width);
+                                    setActiveImageIndex(index);
+                                }}
+                            >
+                                {images.map((img, idx) => (
+                                    <div key={idx} className="w-full h-full flex-shrink-0 snap-center relative">
+                                        <img src={img} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                    </div>
+                                ))}
+                            </div>
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
                                 <FiTool className="text-slate-300 text-6xl drop-shadow-sm" />
                             </div>
                         )}
 
-                        {/* Gradient Overlay for Text Readability if needed, though we use clean white below */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-50"></div>
-
-                        {/* Status Pill - Floating */}
+                        {/* Status Pill */}
                         <div className={`absolute top-6 right-6 px-4 py-1.5 rounded-full backdrop-blur-xl border border-white/20 shadow-sm flex items-center gap-2 ${isAvailable ? 'bg-white/90 text-emerald-600' : 'bg-white/90 text-amber-600'}`}>
                             <span className={`relative flex h-2.5 w-2.5`}>
                                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isAvailable ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
@@ -128,9 +146,20 @@ const DetailAlat = () => {
                             </span>
                             <span className="text-[11px] font-bold tracking-wider uppercase">{isAvailable ? 'Tersedia' : 'Dipinjam'}</span>
                         </div>
+
+                        {/* Dots Indicator */}
+                        {images.length > 1 && (
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 p-2 rounded-full bg-black/10 backdrop-blur-sm">
+                                {images.map((_, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${idx === activeImageIndex ? 'bg-white w-3' : 'bg-white/50'}`}
+                                    ></div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Content Body */}
                     <div className="p-8 pt-6">
                         <div className="mb-6">
                             <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2 leading-tight">{item.nama}</h1>
@@ -141,9 +170,7 @@ const DetailAlat = () => {
                             </div>
                         </div>
 
-                        {/* Specs Grid */}
                         <div className="grid grid-cols-1 gap-6">
-
                             <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
                                 <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-blue-500">
                                     <FiMapPin size={20} />
@@ -176,12 +203,11 @@ const DetailAlat = () => {
                                     </div>
                                 </div>
                             </div>
-
                         </div>
                     </div>
                 </div>
 
-                {/* 2. Log History - Minimalist List */}
+                {/* Logs Section */}
                 {logs.length > 0 && (
                     <div className="pt-4">
                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 px-2">Aktivitas Terakhir</h3>
@@ -212,7 +238,7 @@ const DetailAlat = () => {
                 )}
             </div>
 
-            {/* Floating Action Bar (Glassmorphism) */}
+            {/* FAB */}
             <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-slate-200/50 z-40 transition-all duration-300">
                 <div className="max-w-md mx-auto">
                     <button
@@ -222,12 +248,10 @@ const DetailAlat = () => {
                         <FiSave size={18} />
                         <span>UPDATE STATUS / SERAH TERIMA</span>
                     </button>
-                    {/* Safe Area for Home Indicator on iOS */}
                     <div className="h-2"></div>
                 </div>
             </div>
 
-            {/* Modal Injection */}
             {isModalOpen && (
                 <HandoverModal
                     tool={item}
