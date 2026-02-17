@@ -30,9 +30,8 @@ export const uploadImage = async (file: File): Promise<string> => {
     } else {
       throw new Error('No URL in response');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('ImageKit upload error:', error);
-    // Fallback URL for demo reliability (if API fails due to CORS/Auth)
-    return URL.createObjectURL(file);
+    throw error;
   }
 };

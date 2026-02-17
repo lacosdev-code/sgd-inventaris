@@ -40,10 +40,11 @@ export default function HandoverModal({ tool, onClose, onSuccess }: HandoverModa
 
                 const uploadRes = await uploadToolImage(formData);
 
-                if (!uploadRes.success || !uploadRes.url) {
+                // FIX: Check for .urls array, not .url
+                if (!uploadRes.success || !uploadRes.urls || uploadRes.urls.length === 0) {
                     throw new Error(uploadRes.error || "Gagal upload foto");
                 }
-                imageUrl = uploadRes.url;
+                imageUrl = uploadRes.urls[0];
             }
 
             // 2. Database Transactions
@@ -78,11 +79,6 @@ export default function HandoverModal({ tool, onClose, onSuccess }: HandoverModa
 
             } else {
                 // Logika Pengembalian
-                // Cari transaksi peminjaman aktif terakhir untuk item ini oleh user ini (opsional, atau ambil sembarang yang aktif)
-                // Di snipput user, dia update berdasarkan barang_id dan status 'dipinjam'. 
-                // Note: Ini bisa update BANYAK record jika ada banyak yang dipinjam. 
-                // Idealnya kita select dulu satu record spesifik.
-                // Untuk simplifikasi sesuai request user, kita cari record status 'dipinjam' untuk barang ini.
 
                 // Ambil ID peminjaman yang akan diupdate (Last in First Out atau spesifik teknisi)
                 const { data: loanData, error: fetchError } = await supabase
@@ -113,10 +109,7 @@ export default function HandoverModal({ tool, onClose, onSuccess }: HandoverModa
 
                 if (returnError) throw returnError;
 
-                // B. Update stok di inventaris_utama (Tambah stok tersedia/total tergantung kondisi)
-                // Default logic: Tambahkan ke stok tersedia
-                // Jika rusak, mungkin logicnya beda, tapi sementara kita asumsi masuk stok tersedia dulu atau tetap di stok tapi status rusak.
-                // Sesuai logic 'jumlah_tersedia', kita increment.
+                // B. Update stok di inventaris_utama (Tambah stok tersedia)
                 const { error: updateError } = await supabase
                     .from('inventaris_utama')
                     .update({ jumlah_tersedia: tool.jumlah_tersedia + 1 })
@@ -125,11 +118,27 @@ export default function HandoverModal({ tool, onClose, onSuccess }: HandoverModa
                 if (updateError) throw updateError;
             }
 
+            // 3. Insert into Tool Images (Gallery)
+            // This ensures the photo appears in the Detail Page Carousel
+            if (imageUrl) {
+                const { error: galleryError } = await supabase
+                    .from('tool_images')
+                    .insert({
+                        tool_id: tool.id,
+                        image_url: imageUrl
+                    });
+
+                if (galleryError) {
+                    console.error("Failed to add to gallery:", galleryError);
+                    // Non-blocking error, just log it.
+                }
+            }
+
             await Swal.fire({
                 icon: 'success',
                 title: 'Berhasil!',
-                text: `Data ${type} berhasil disimpan.`,
-                timer: 1500,
+                text: `Data ${type} berhasil disimpan. Foto juga ditambahkan ke galeri.`,
+                timer: 2000,
                 showConfirmButton: false
             });
 

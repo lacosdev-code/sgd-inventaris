@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { uploadImage } from '../services/imagekit';
-import { FiTool, FiCamera, FiSave, FiUser, FiMoreHorizontal, FiSearch, FiClock } from 'react-icons/fi';
+import { FiTool, FiCamera, FiSave, FiUser, FiMoreHorizontal, FiSearch, FiClock, FiLoader } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -11,8 +11,6 @@ const KondisiAlat = () => {
     const [loading, setLoading] = useState(true);
     const [items, setItems] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-
-
 
     useEffect(() => {
         fetchData();
@@ -172,12 +170,6 @@ const KondisiAlat = () => {
                     if (newStock <= 0) throw new Error("Stok habis! Tidak bisa meminjam alat ini.");
                     newStock -= 1;
                 } else if (formValues.tipe === 'Kembali') {
-                    // Optional: Cap at max quantity
-                    if (newStock >= currentItem.jumlah) {
-                        // Just warn log, don't block? Or block? Let's check logic.
-                        // Ideally shouldn't return more than owned, but easy to fix manually if needed.
-                        // Let's allow but maybe warn in console.
-                    }
                     newStock += 1;
                 }
 
@@ -212,12 +204,22 @@ const KondisiAlat = () => {
                     }]);
 
                 if (logError) {
-                    // Serious issue: Stock updated but Log failed. 
-                    // In a real transaciton, we'd rollback. Here, we just warn user.
                     console.error("Log failed", logError);
                     Swal.fire('Warning', 'Stok terupdate tapi log gagal disimpan.', 'warning');
                 } else {
                     // Success!
+
+                    // 6. ALSO INSERT INTO TOOL_IMAGES (Gallery)
+                    if (photoUrl) {
+                        const { error: galleryError } = await supabase
+                            .from('tool_images')
+                            .insert({
+                                tool_id: formValues.itemId,
+                                image_url: photoUrl
+                            });
+                        if (galleryError) console.error("Gallery insert failed:", galleryError);
+                    }
+
                     Swal.fire({
                         icon: 'success',
                         title: 'Transaksi Berhasil!',
