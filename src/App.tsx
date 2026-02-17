@@ -174,19 +174,24 @@ const AppContent = () => {
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 shrink-0 z-30">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center p-1.5 shadow-lg shadow-slate-900/20">
+          {/* Clickable Logo - Same as Desktop */}
+          <NavLink to="/" className="flex items-center gap-3 group/logo cursor-pointer hover:scale-105 transition-transform duration-300">
+            {/* Logo Icon Box - Original Gold Colors */}
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-sgd-500/20 relative overflow-hidden p-1.5 transition-all duration-500 group-hover/logo:rotate-2 logo-glow border border-gray-200">
               <img
                 src="https://ik.imagekit.io/Sgd/Logo%20Potrait.png"
-                alt="Logo"
-                className="w-full h-full object-contain brightness-0 invert"
+                alt="Sunggiardi Logo"
+                className="w-full h-full object-contain relative z-10 drop-shadow-sm"
               />
+              <div className="absolute inset-0 bg-gradient-to-tr from-sgd-400/10 to-transparent group-hover/logo:bg-sgd-400/20 transition"></div>
             </div>
+            {/* Logo Text */}
             <div className="flex flex-col">
               <span className="font-bold text-slate-900 tracking-tight leading-none text-sm">SUNGGIARDI</span>
-              <span className="text-[9px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Corporation</span>
+              <span className="text-[9px] text-sgd-500 font-medium uppercase tracking-widest mt-0.5">Corporation</span>
             </div>
-          </div>
+          </NavLink>
+
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
