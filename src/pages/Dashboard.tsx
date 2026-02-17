@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import {
   Chart as ChartJS,
@@ -16,6 +17,7 @@ import { FaBox, FaExclamationTriangle, FaExchangeAlt, FaMapMarkerAlt, FaCheckCir
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalBarang: 0,
     barangBagus: 0,
@@ -172,24 +174,28 @@ const Dashboard = () => {
             title="Total Aset"
             value={stats.totalBarang}
             colorClass="bg-[#013220]/10 text-[#013220]"
+            onClick={() => navigate('/inventaris')}
           />
           <StatCard
             icon={<FaCheckCircle />}
             title="Siap Pakai"
             value={stats.barangBagus}
             colorClass="bg-green-100 text-green-600"
+            onClick={() => navigate('/inventaris?search=bagus')}
           />
           <StatCard
             icon={<FaExclamationTriangle />}
             title="Kondisi Rusak"
             value={stats.barangRusak}
             colorClass="bg-red-100 text-red-600"
+            onClick={() => navigate('/inventaris?search=rusak')}
           />
           <StatCard
             icon={<FaExchangeAlt />}
             title="Sedang Dipinjam"
             value={stats.totalPinjam}
             colorClass="bg-[#D4AF37]/20 text-[#D4AF37]"
+            onClick={() => navigate('/peminjaman')}
           />
         </div>
 
@@ -349,9 +355,12 @@ const Dashboard = () => {
 };
 
 // Sub-komponen untuk Card Statistik
-const StatCard = ({ icon, title, value, colorClass }: any) => {
+const StatCard = ({ icon, title, value, colorClass, onClick }: any) => {
   return (
-    <div className="group bg-white p-8 rounded-3xl shadow-modern hover:shadow-modern-lg border border-gray-100/50 flex items-center gap-6 transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden relative">
+    <div
+      onClick={onClick}
+      className="group bg-white p-8 rounded-3xl shadow-modern hover:shadow-modern-lg border border-gray-100/50 flex items-center gap-6 transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden relative"
+    >
       <div className="absolute inset-0 bg-gold-gradient-soft opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
       <div className={`relative z-10 w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${colorClass} transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3`}>
         {icon}

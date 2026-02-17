@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useInventaris } from '../hooks/useInventaris';
 import { supabase } from '../services/supabase';
 import { QRCodeSVG } from 'qrcode.react';
@@ -10,8 +11,17 @@ import ItemModal from '../components/Inventaris/ItemModal';
 
 const InventarisUtama = () => {
   const { items, loading, deleteItem, upsertItem } = useInventaris();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [showScanner, setShowScanner] = useState(false);
+
+  // Update term if URL changes (optional, but good for back/forward navigation)
+  useEffect(() => {
+    const query = searchParams.get('search');
+    if (query) {
+      setSearchTerm(query);
+    }
+  }, [searchParams]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State
