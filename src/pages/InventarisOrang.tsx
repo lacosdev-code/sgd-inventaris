@@ -11,8 +11,18 @@ const InventarisOrang = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Add Personnel Modal States
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [selectedItemName, setSelectedItemName] = useState('');
+  const [assignQty, setAssignQty] = useState(1);
+  const [assignCondition, setAssignCondition] = useState('Bagus');
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
+
   useEffect(() => {
     fetchDataOrang();
+    fetchAvailableItems();
   }, []);
 
   const fetchDataOrang = async () => {
@@ -62,6 +72,84 @@ const InventarisOrang = () => {
       setDataOrang([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAvailableItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('inventaris_utama')
+        .select('id, nama, jumlah_tersedia')
+        .gt('jumlah_tersedia', 0)
+        .order('nama');
+
+      if (!error) {
+        setAvailableItems(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching items:', error);
+    }
+  };
+
+  const handleSavePersonnel = async () => {
+    // Validation
+    if (!newPersonName.trim()) {
+      Swal.fire('Error', 'Nama personel harus diisi', 'error');
+      return;
+    }
+
+    if (!selectedItemId) {
+      Swal.fire('Error', 'Pilih item yang akan ditugaskan', 'error');
+      return;
+    }
+
+    const selectedItem = availableItems.find(item => item.id === selectedItemId);
+    if (!selectedItem) return;
+
+    if (assignQty > selectedItem.jumlah_tersedia) {
+      Swal.fire('Error', `Stok tidak cukup. Tersedia: ${selectedItem.jumlah_tersedia}`, 'error');
+      return;
+    }
+
+    try {
+      // 1. Insert to inventaris_orang
+      const { error: insertError } = await supabase
+        .from('inventaris_orang')
+        .insert({
+          orang: newPersonName.trim(),
+          nama: selectedItem.nama,
+          jumlah: assignQty,
+          kondisi: assignCondition
+        });
+
+      if (insertError) throw insertError;
+
+      // 2. Update inventaris_utama (reduce available quantity)
+      const { error: updateError } = await supabase
+        .from('inventaris_utama')
+        .update({
+          jumlah_tersedia: selectedItem.jumlah_tersedia - assignQty
+        })
+        .eq('id', selectedItemId);
+
+      if (updateError) throw updateError;
+
+      // 3. Success
+      await Swal.fire('Berhasil!', 'Personel berhasil ditambahkan', 'success');
+      setShowAddModal(false);
+
+      // Reset form
+      setNewPersonName('');
+      setSelectedItemId('');
+      setSelectedItemName('');
+      setAssignQty(1);
+      setAssignCondition('Bagus');
+
+      // Refresh data
+      fetchDataOrang();
+      fetchAvailableItems();
+    } catch (error: any) {
+      Swal.fire('Error', error.message, 'error');
     }
   };
 
@@ -334,14 +422,23 @@ const InventarisOrang = () => {
               <p className="text-gray-500 mt-1">Aset yang ditugaskan ke personel lapangan</p>
             </div>
           </div>
-          <div className="relative w-full md:w-80 group">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sgd-600 transition-colors text-lg" />
-            <input
-              type="text"
-              placeholder="Cari nama personel..."
-              className="w-full pl-12 pr-4 py-3.5 bg-slate-50/80 border-2 border-slate-200/50 rounded-2xl focus:border-sgd-400 focus:bg-white outline-none transition-all duration-300 text-sm font-semibold placeholder:text-slate-400 shadow-sm focus:shadow-md"
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex gap-3 items-center w-full md:w-auto">
+            <div className="relative flex-1 md:w-80 group">
+              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sgd-600 transition-colors text-lg" />
+              <input
+                type="text"
+                placeholder="Cari nama personel..."
+                className="w-full pl-12 pr-4 py-3.5 bg-slate-50/80 border-2 border-slate-200/50 rounded-2xl focus:border-sgd-400 focus:bg-white outline-none transition-all duration-300 text-sm font-semibold placeholder:text-slate-400 shadow-sm focus:shadow-md"
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-3.5 bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl whitespace-nowrap"
+            >
+              <FaPlus />
+              <span className="hidden md:inline">Tambah Personel</span>
+            </button>
           </div>
         </div>
       </div>
@@ -454,6 +551,126 @@ const InventarisOrang = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {/* Add Personnel Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-sgd-50 to-white">
+              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+                <div className="p-2 bg-sgd-600 rounded-xl text-white">
+                  <FaPlus />
+                </div>
+                Tambah Personel Baru
+              </h2>
+              <p className="text-gray-500 mt-1 ml-14">Tugaskan aset ke personel lapangan</p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5">
+              {/* Personnel Name */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Nama Personel <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newPersonName}
+                  onChange={(e) => setNewPersonName(e.target.value)}
+                  placeholder="Contoh: John Doe"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                />
+              </div>
+
+              {/* Item Selection */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Pilih Item dari Master Aset <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedItemId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedItemId(id);
+                    const item = availableItems.find(i => i.id === id);
+                    setSelectedItemName(item?.nama || '');
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                >
+                  <option value="">-- Pilih Item --</option>
+                  {availableItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.nama} (Tersedia: {item.jumlah_tersedia})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity and Condition */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Jumlah <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={assignQty}
+                    onChange={(e) => setAssignQty(parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Kondisi
+                  </label>
+                  <select
+                    value={assignCondition}
+                    onChange={(e) => setAssignCondition(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                  >
+                    <option value="Bagus">Bagus</option>
+                    <option value="Rusak">Rusak</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              {selectedItemId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Info:</strong> Stok di Master Aset akan berkurang sebanyak <strong>{assignQty}</strong> unit setelah disimpan.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setNewPersonName('');
+                  setSelectedItemId('');
+                  setSelectedItemName('');
+                  setAssignQty(1);
+                  setAssignCondition('Bagus');
+                }}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSavePersonnel}
+                className="px-6 py-3 bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
