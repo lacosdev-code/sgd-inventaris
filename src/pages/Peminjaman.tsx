@@ -29,7 +29,7 @@ const Peminjaman = () => {
       // Ambil barang yang stoknya > 0
       const { data: items } = await supabase
         .from('inventaris_utama')
-        .select('id, nama, jumlah_tersedia')
+        .select('id, nama, jumlah_tersedia, lokasi')
         .gt('jumlah_tersedia', 0)
         .eq('is_deleted', false)
         .order('nama', { ascending: true });
@@ -48,7 +48,7 @@ const Peminjaman = () => {
   const handlePinjamModal = async () => {
     // Generate options for the select element
     const itemOptions = availableItems.map(item =>
-      `<option value="${item.id}">${item.nama} (Sisa: ${item.jumlah_tersedia})</option>`
+      `<option value="${item.id}">${item.nama} ${item.lokasi ? `📍 ${item.lokasi}` : ''} (Sisa: ${item.jumlah_tersedia})</option>`
     ).join('');
 
     if (availableItems.length === 0) {
