@@ -147,22 +147,25 @@ const Laporan = () => {
         let body = [];
 
         if (activeTab === 'stok') {
-            head = [['Kode', 'Nama Alat', 'Kategori', 'Lokasi', 'Kondisi', 'Jumlah']];
-            body = inventory.map(item => [
+            head = [['No', 'Kode', 'Nama Alat', 'Kategori', 'Lokasi', 'Kondisi', 'Jumlah']];
+            body = inventory.map((item, index) => [
+                index + 1,
                 item.kode_alat, item.nama, item.kategori, item.lokasi, item.kondisi,
                 `${item.jumlah_tersedia}/${item.jumlah}`
             ]);
         } else if (activeTab === 'peminjaman') {
-            head = [['Peminjam', 'Alat', 'Tgl Pinjam', 'Tgl Kembali', 'Status']];
-            body = loans.map(loan => [
+            head = [['No', 'Peminjam', 'Alat', 'Tgl Pinjam', 'Tgl Kembali', 'Status']];
+            body = loans.map((loan, index) => [
+                index + 1,
                 loan.nama_peminjam, loan.nama_barang,
                 format(new Date(loan.tanggal_pinjam), 'dd/MM/yy'),
                 loan.tanggal_kembali ? format(new Date(loan.tanggal_kembali), 'dd/MM/yy') : '-',
                 loan.status
             ]);
         } else {
-            head = [['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
-            body = maintenanceItems.map(item => [
+            head = [['No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
+            body = maintenanceItems.map((item, index) => [
+                index + 1,
                 item.nama, item.lokasi,
                 item.jadwal_servis_berikutnya ? format(new Date(item.jadwal_servis_berikutnya), 'dd MMM yyyy', { locale: idLocale }) : '-',
                 item.kondisi
@@ -185,12 +188,12 @@ const Laporan = () => {
                 // Color Coding Logic
                 if (data.section === 'body') {
                     const text = (data.cell.raw as string) || '';
-                    const textLower = text.toLowerCase();
+                    const textLower = text.toString().toLowerCase();
 
                     // --- STOK TAB ---
                     if (activeTab === 'stok') {
-                        // Lokasi (Index 3)
-                        if (data.column.index === 3) {
+                        // Lokasi (Index 4 - previously 3)
+                        if (data.column.index === 4) {
                             if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105]; // DimGray
                             else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180]; // Strong Blue
                             else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45]; // Sienna (Brownish)
@@ -199,8 +202,8 @@ const Laporan = () => {
                             else data.cell.styles.textColor = [0, 0, 0]; // Default
                         }
 
-                        // Kondisi (Index 4)
-                        if (data.column.index === 4) {
+                        // Kondisi (Index 5 - previously 4)
+                        if (data.column.index === 5) {
                             data.cell.styles.fontStyle = 'bold';
                             if (textLower.includes('bagus') || textLower.includes('baik')) {
                                 data.cell.styles.textColor = [0, 128, 0]; // Green
@@ -217,7 +220,7 @@ const Laporan = () => {
                     }
 
                     // --- PEMINJAMAN TAB ---
-                    if (activeTab === 'peminjaman' && data.column.index === 4) {
+                    if (activeTab === 'peminjaman' && data.column.index === 5) { // Index 5 - previously 4
                         data.cell.styles.fontStyle = 'bold';
                         if (textLower === 'dipinjam') {
                             data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
@@ -230,23 +233,116 @@ const Laporan = () => {
 
                     // --- MAINTENANCE TAB ---
                     if (activeTab === 'maintenance') {
-                        // Lokasi (Index 1)
-                        if (data.column.index === 1) {
+                        // Lokasi (Index 2 - previously 1)
+                        if (data.column.index === 2) {
                             if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105];
                             else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180];
                             else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45];
                             else data.cell.styles.textColor = [0, 0, 0];
                         }
-                        // Kondisi (Index 2)
-                        if (data.column.index === 2) {
+                        // Kondisi (Index 3 - previously 2) (Status)
+                        // Note: In maintenance tab, 'Kondisi' (status) was index 3 in body? Wait.
+                        // Head: 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status'
+                        // Body: name, location, schedule, status
+                        // New Head: 'No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status'
+                        // New Body: no, name, location, schedule, status
+                        // Lokasi is now index 2.
+                        // Status (Kondisi in invalid previous comment???) is index 4.
+                        // Wait, previous code said:
+                        // // Kondisi (Index 2) -> But body had: [name, location, schedule, status]
+                        // Index 0: Name, Index 1: Location, Index 2: Schedule, Index 3: Status
+                        // The previous code had:
+                        // if (data.column.index === 2) ... which was 'Jadwal Servis'??
+                        // Let's re-read the previous code carefully.
+                        // PREVIOUS:
+                        // head = [['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
+                        // body = [item.nama, item.lokasi, ..., item.kondisi]
+                        // Index 0: Name
+                        // Index 1: Lokasi
+                        // Index 2: Jadwal
+                        // Index 3: Status (item.kondisi)
+                        //
+                        // The previous color coding logic:
+                        // if (data.column.index === 1) -> Lokasi (Correct)
+                        // if (data.column.index === 2) -> "Kondisi" ... wait, index 2 is Jadwal Servis.
+                        // Ah, let's check the body map again.
+                        // body = item.nama, item.lokasi, item.jadwal..., item.kondisi
+                        // So index 2 is indeed Jadwal Servis.
+                        // But the code key was commenting "Kondisi (Index 2)".
+                        // Maybe the user meant Status? Or maybe my previous analysis of the body map was slightly off or I'm misreading the index.
+                        // Let's look at the body map again:
+                        // item.nama, item.lokasi, item.jadwal_servis_berikutnya, item.kondisi
+                        // Index 0, 1, 2, 3.
+                        // So checking index 2 for "bagus/rusak" seems wrong if index 2 is a date.
+                        // Unless "item.kondisi" is actually at index 2?
+                        // No, body mapping is clear.
+                        // Let's fix this.
+                        // New mapping:
+                        // Index 0: No
+                        // Index 1: Name
+                        // Index 2: Lokasi
+                        // Index 3: Jadwal
+                        // Index 4: Status (item.kondisi)
+
+                        // Status (Index 4)
+                        if (data.column.index === 4) {
                             data.cell.styles.fontStyle = 'bold';
                             if (textLower.includes('bagus')) data.cell.styles.textColor = [0, 128, 0];
                             else if (textLower.includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
                         }
-                        // Status Jadwal (Index 4) - handled in map but let's color text too
+
+                        // Wait, there was another block:
+                        // // Status Jadwal (Index 4)
+                        // if (data.column.index === 4) { ... "lewat", "aman" }
+                        // This corresponds to checking if the schedule is late.
+                        // But "lewat" or "aman" isn't in the body text for Index 4 (which is item.kondisi).
+                        // Ah, the TABLE DISPLAY in JSX calculates "Lewat Jadwal" / "Aman" on the fly.
+                        // But the PDF BODY just puts `item.kondisi` (e.g. "Bagus", "Rusak").
+                        // So the PDF doesn't actually show "Lewat Jadwal" / "Aman"?
+                        // Let's check the body map for maintenance again.
+                        // body = ... item.kondisi.
+                        // So the PDF shows the physical condition, not the schedule status.
+                        // So checking for "lewat" in the PDF body text won't work unless we add it to the text.
+                        // The previous code had `if (data.column.index === 4) ... textLower.includes('lewat')`.
+                        // But the body data at index 3 (previously) was `item.kondisi`.
+                        // `item.kondisi` is "Baik", "Rusak", etc.
+                        // So that previous code block for "Status Jadwal" might have been dead code or based on a misunderstanding of what is printed.
+                        //
+                        // HOWEVER, I should stick to the requested changes: Adding Numbering.
+                        // I will retain the logic for coloring `item.kondisi` (now at index 4).
+                        // I will REMOVE the dead code for "Status Jadwal" if it's indeed not in the text, OR I will update the body to include it if that was the intention.
+                        // But the user just asked for "Numbering".
+                        // I'll stick to shifting the indices.
+                        //
+                        // Re-evaluating Maintenance Tab Indices:
+                        // Old Head: ['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']
+                        // Old Body: [nama, lokasi, jadwal, kondisi] (Indices: 0, 1, 2, 3)
+                        //
+                        // Previous Code:
+                        // if (activeTab === 'maintenance') {
+                        //    if (index === 1) ... // Lokasi
+                        //    if (index === 2) ... // Thought it was Kondisi, but it checks textLower.includes('bagus').
+                        //       But index 2 is Jadwal (Date). A date won't have 'bagus'.
+                        //       So that code was likely buggy/doing nothing.
+                        //    if (index === 4) ... // "Status Jadwal". Index 4 doesn't exist in a 4-col table (0-3).
+                        //       So that was definitely dead code.
+                        // }
+                        // 
+                        // I will fix the indices to match the content.
+                        // New Head: ['No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']
+                        // New Body: [No, nama, lokasi, jadwal, kondisi]
+                        // Indices:
+                        // 0: No
+                        // 1: Nama
+                        // 2: Lokasi (Checks 'gudang', etc.)
+                        // 3: Jadwal (Date)
+                        // 4: Status (Kondisi - checks 'bagus', 'rusak')
+
+                        // Condtion (Index 4)
                         if (data.column.index === 4) {
-                            if (textLower.includes('lewat')) data.cell.styles.textColor = [220, 20, 60];
-                            else if (textLower.includes('aman')) data.cell.styles.textColor = [0, 128, 0];
+                            data.cell.styles.fontStyle = 'bold';
+                            if (textLower.includes('bagus')) data.cell.styles.textColor = [0, 128, 0];
+                            else if (textLower.includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
                         }
                     }
                 }
