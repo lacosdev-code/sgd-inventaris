@@ -202,7 +202,6 @@ const AppContent = () => {
               <Route path="/utama" element={<InventarisUtama />} />
               <Route path="/orang" element={<InventarisOrang />} />
               <Route path="/peminjaman" element={<Peminjaman />} />
-              <Route path="/kondisi" element={<KondisiAlat />} />
               <Route path="/laporan" element={<Laporan />} />
               <Route path="/detail/:id" element={<DetailAlat />} />
               <Route path="/log" element={<ActivityLog />} />
