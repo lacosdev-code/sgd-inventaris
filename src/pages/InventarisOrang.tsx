@@ -142,43 +142,92 @@ const InventarisOrang = () => {
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
-  // Fungsi export PDF per orang
-  const exportPersonPDF = (person: string, items: any[]) => {
+  // Helper to load image for PDF
+  const loadImage = (url: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src = url;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } else {
+          resolve('');
+        }
+      };
+      img.onerror = () => resolve('');
+    });
+  };
+
+  // Fungsi export PDF per orang (Enhanced with logo and color coding)
+  const exportPersonPDF = async (person: string, items: any[]) => {
     const doc = new jsPDF();
 
-    doc.setFillColor(1, 50, 32);
-    doc.rect(0, 0, 210, 40, 'F');
+    // --- HEADER WITH LOGO ---
+    try {
+      const logoUrl = "https://ik.imagekit.io/Sgd/Logo%20Potrait.png?tr=w-200";
+      const logoData = await loadImage(logoUrl);
+      if (logoData) {
+        doc.addImage(logoData, 'PNG', 14, 10, 25, 25);
+      }
+    } catch (e) {
+      console.warn("Logo failed to load", e);
+    }
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LAPORAN INVENTARIS PERSONEL', 105, 15, { align: 'center' });
+    // Company Info
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(1, 50, 32); // SGD Green
+    doc.text('PT. SUNGGIARDI CORPORATION', 45, 18);
 
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text('Puri Park View Apartment BC 3 / 16, Meruya Utara, Kembangan', 45, 24);
+    doc.text('Jakarta Barat, DKI Jakarta 11620, ID', 45, 29);
+    doc.text('Email: admin@sgd-corp.com | Telp: (021) 789-1234', 45, 34);
+
+    // Line separator
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(1, 50, 32);
+    doc.line(14, 38, 196, 38);
+
+    // Report Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text('LAPORAN INVENTARIS PERSONEL', 14, 48);
+
+    // Person Info
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('PT Sarana Guna Dharma', 105, 22, { align: 'center' });
-    doc.text('Jl. Raya Bekasi KM 18, Jakarta Timur', 105, 28, { align: 'center' });
+    doc.setFont("helvetica", "normal");
+    doc.text(`Nama Personel: ${person}`, 14, 54);
+    doc.text(`Tanggal Cetak: ${format(new Date(), 'dd MMMM yyyy HH:mm')}`, 14, 60);
+    doc.text(`Total Item: ${items.length}`, 14, 66);
 
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Nama Personel: ${person}`, 14, 50);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Tanggal Cetak: ${format(new Date(), 'dd MMMM yyyy')}`, 14, 57);
-    doc.text(`Total Item: ${items.length}`, 14, 64);
+    // Count by type
+    const permanentCount = items.filter(i => i.type === 'permanent').length;
+    const loanCount = items.filter(i => i.type === 'loan').length;
+    doc.text(`(${permanentCount} Tetap, ${loanCount} Pinjaman)`, 14, 72);
 
+    // Table data
     const tableData = items.map((item, idx) => [
       idx + 1,
       item.nama,
       item.type === 'permanent' ? 'Tetap' : 'Pinjaman',
       item.kondisi,
-      item.type === 'loan' && item.tgl_kembali
+      item.type === 'loan' && item.tgl_kembali 
         ? format(new Date(item.tgl_kembali), 'dd/MM/yyyy')
         : '-'
     ]);
 
     autoTable(doc, {
-      startY: 72,
+      startY: 78,
       head: [['No', 'Nama Barang', 'Jenis', 'Kondisi', 'Tgl Kembali']],
       body: tableData,
       theme: 'grid',
@@ -192,15 +241,48 @@ const InventarisOrang = () => {
         fontSize: 9,
         cellPadding: 3
       },
+      alternateRowStyles: { fillColor: [245, 250, 245] },
       columnStyles: {
         0: { halign: 'center', cellWidth: 15 },
         1: { cellWidth: 70 },
         2: { halign: 'center', cellWidth: 30 },
         3: { halign: 'center', cellWidth: 30 },
         4: { halign: 'center', cellWidth: 35 }
+      },
+      didParseCell: (data) => {
+        // Color Coding Logic
+        if (data.section === 'body') {
+          const text = (data.cell.raw as string) || '';
+          const textLower = text.toString().toLowerCase();
+
+          // Jenis column (index 2)
+          if (data.column.index === 2) {
+            data.cell.styles.fontStyle = 'bold';
+            if (textLower === 'tetap') {
+              data.cell.styles.textColor = [0, 80, 180]; // Blue
+            } else if (textLower === 'pinjaman') {
+              data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
+            }
+          }
+
+          // Kondisi column (index 3)
+          if (data.column.index === 3) {
+            data.cell.styles.fontStyle = 'bold';
+            if (textLower.includes('bagus') || textLower.includes('baik')) {
+              data.cell.styles.textColor = [0, 128, 0]; // Green
+            } else if (textLower.includes('rusak ringan')) {
+              data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
+            } else if (textLower.includes('rusak berat') || textLower.includes('rusak')) {
+              data.cell.styles.textColor = [220, 20, 60]; // Red
+            } else if (textLower.includes('normal')) {
+              data.cell.styles.textColor = [0, 100, 0]; // Dark Green
+            }
+          }
+        }
       }
     });
 
+    // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
