@@ -224,11 +224,11 @@ const Dashboard = () => {
 
         {/* SECTION 1: Master Aset Perusahaan */}
         <div className="mb-3 md:mb-4">
-          <h2 className="text-base md:text-lg font-bold text-slate-700 dark:text-gray-200 flex items-center gap-2">
-            <FaBox className="text-[#013220] dark:text-sgd-400 text-sm md:text-base" />
+          <h2 className="text-base md:text-lg font-bold text-slate-700 flex items-center gap-2">
+            <FaBox className="text-[#013220] text-sm md:text-base" />
             Master Aset Perusahaan
           </h2>
-          <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Semua inventaris yang dimiliki perusahaan</p>
+          <p className="text-xs md:text-sm text-gray-500">Semua inventaris yang dimiliki perusahaan</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8 lg:mb-10">
           <StatCard
@@ -259,11 +259,11 @@ const Dashboard = () => {
 
         {/* SECTION 2: Tracking Personel & Peminjaman */}
         <div className="mb-3 md:mb-4">
-          <h2 className="text-base md:text-lg font-bold text-slate-700 dark:text-gray-200 flex items-center gap-2">
-            <FaUsers className="text-purple-600 dark:text-purple-400 text-sm md:text-base" />
+          <h2 className="text-base md:text-lg font-bold text-slate-700 flex items-center gap-2">
+            <FaUsers className="text-purple-600 text-sm md:text-base" />
             Tracking Personel & Peminjaman
           </h2>
-          <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Aset yang dipinjam atau ditugaskan ke personel</p>
+          <p className="text-xs md:text-sm text-gray-500">Aset yang dipinjam atau ditugaskan ke personel</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8">
           <StatCard
@@ -509,16 +509,16 @@ const Dashboard = () => {
 // Sub-komponen untuk Card Statistik
 const StatCard = ({ icon, title, value, subtitle, colorClass, onClick }: any) => {
   return (
-    <div onClick={onClick} className="group bg-white dark:bg-slate-800 p-4 md:p-6 lg:p-8 rounded-2xl md:rounded-3xl shadow-modern hover:shadow-modern-lg border border-gray-100 dark:border-slate-700 flex items-center gap-3 md:gap-4 lg:gap-6 transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden relative">
-      <div className="absolute inset-0 bg-gold-gradient-soft dark:bg-slate-700/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+    <div onClick={onClick} className="group bg-white p-4 md:p-6 lg:p-8 rounded-2xl md:rounded-3xl shadow-modern hover:shadow-modern-lg border border-gray-100/50 flex items-center gap-3 md:gap-4 lg:gap-6 transition-all duration-500 hover:-translate-y-2 cursor-pointer overflow-hidden relative">
+      <div className="absolute inset-0 bg-gold-gradient-soft opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
       <div className={`relative z-10 w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-xl md:rounded-2xl flex items-center justify-center text-xl md:text-2xl lg:text-3xl shadow-lg ${colorClass} transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3`}>
         {icon}
       </div>
       <div className="relative z-10">
-        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider mb-0.5 md:mb-1">{title}</p>
-        <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">{value}</h3>
+        <p className="text-xs md:text-sm text-gray-500 font-semibold uppercase tracking-wider mb-0.5 md:mb-1">{title}</p>
+        <h3 className="text-2xl md:text-3xl font-black text-slate-900">{value}</h3>
         {subtitle && (
-          <p className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500 mt-0.5 md:mt-1">{subtitle}</p>
+          <p className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1">{subtitle}</p>
         )}
       </div>
     </div>
