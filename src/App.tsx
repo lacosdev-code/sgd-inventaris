@@ -7,14 +7,12 @@ import {
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
-// Import Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import InventarisUtama from './pages/InventarisUtama';
 import InventarisOrang from './pages/InventarisOrang';
 import Peminjaman from './pages/Peminjaman';
 import ActivityLog from './pages/ActivityLog';
-import KondisiAlat from './pages/KondisiAlat';
 import DetailAlat from './pages/DetailAlat';
 import Laporan from './pages/Laporan';
 
@@ -41,7 +39,6 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
     { path: '/utama', name: 'Inventaris Utama', icon: <FiBox /> },
     { path: '/orang', name: 'Inventaris Orang', icon: <FiUsers /> },
     { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat /> },
-    { path: '/kondisi', name: 'Kondisi & Serah Terima', icon: <FiTool /> },
     { path: '/laporan', name: 'Laporan', icon: <FiPieChart /> },
     { path: '/log', name: 'Log Aktivitas', icon: <FiClock /> },
   ];
