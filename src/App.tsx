@@ -3,7 +3,7 @@ import { HashRouter as Router, Routes, Route, NavLink, Navigate } from 'react-ro
 import { supabase, seedDatabase } from './services/supabase';
 import {
   FiGrid, FiBox, FiUsers, FiRepeat, FiClock,
-  FiLogOut, FiMenu, FiX, FiTool, FiPieChart
+  FiLogOut, FiMenu, FiX, FiTool, FiPieChart, FiMoon, FiSun
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
@@ -16,9 +16,11 @@ import ActivityLog from './pages/ActivityLog';
 import DetailAlat from './pages/DetailAlat';
 import Laporan from './pages/Laporan';
 import KondisiAlat from './pages/KondisiAlat';
+import { useDarkMode } from './contexts/DarkModeContext';
 
 // --- SIDEBAR COMPONENT ---
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) => {
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
 
@@ -103,7 +105,26 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
           </nav>
 
           {/* FOOTER */}
-          <div className="mt-auto pt-6 border-t border-slate-800">
+          <div className="mt-auto pt-6 border-t border-slate-800 space-y-3">
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="group w-full flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-sgd-400 transition-all duration-300"
+            >
+              {isDarkMode ? (
+                <>
+                  <FiSun className="text-xl transition-transform group-hover:rotate-45" />
+                  <span className="font-medium text-sm font-semibold">Light Mode</span>
+                </>
+              ) : (
+                <>
+                  <FiMoon className="text-xl transition-transform group-hover:-rotate-12" />
+                  <span className="font-medium text-sm font-semibold">Dark Mode</span>
+                </>
+              )}
+            </button>
+
+            {/* Logout Button */}
             <button
               onClick={handleLogout}
               className="group w-full flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-red-900/20 hover:text-red-400 transition-all duration-300"
@@ -158,12 +179,12 @@ const AppContent = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 text-[#1A1A1A] font-sans overflow-x-hidden">
+    <div className="flex h-screen bg-gray-50 dark:bg-slate-900 text-[#1A1A1A] dark:text-white font-sans overflow-x-hidden transition-colors duration-200">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setSidebarOpen} />
 
       <div className="flex-1 flex flex-col h-full relative overflow-x-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 shrink-0 z-30">
+        <header className="lg:hidden h-16 bg-white dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between px-4 shrink-0 z-30 transition-colors duration-200">
           <NavLink to="/" className="flex items-center gap-3 group/logo cursor-pointer hover:scale-105 transition-transform duration-300">
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-sgd-500/20 relative overflow-hidden p-1.5 transition-all duration-500 group-hover/logo:rotate-2 logo-glow border border-gray-200">
               <img
@@ -196,7 +217,7 @@ const AppContent = () => {
         </button>
 
         {/* Main Content - Mobile-First Responsive Padding */}
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 p-4 md:p-6 lg:p-8">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-slate-900 p-4 md:p-6 lg:p-8 transition-colors duration-200">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/utama" element={<InventarisUtama />} />
