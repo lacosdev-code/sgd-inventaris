@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { FaUser, FaToolbox, FaExclamationTriangle, FaSearch, FaWhatsapp, FaPlus, FaFilePdf, FaSync } from 'react-icons/fa';
+import { FaUser, FaToolbox, FaExclamationTriangle, FaSearch, FaWhatsapp, FaPlus, FaFilePdf, FaSync, FaEdit } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,6 +19,13 @@ const InventarisOrang = () => {
   const [assignQty, setAssignQty] = useState(1);
   const [assignCondition, setAssignCondition] = useState('Bagus');
   const [availableItems, setAvailableItems] = useState<any[]>([]);
+
+  // Edit Personnel Modal States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editPersonName, setEditPersonName] = useState('');
+  const [editQty, setEditQty] = useState(1);
+  const [editCondition, setEditCondition] = useState('Bagus');
 
   useEffect(() => {
     fetchDataOrang();
@@ -150,6 +157,51 @@ const InventarisOrang = () => {
       fetchAvailableItems();
     } catch (error: any) {
       Swal.fire('Error', error.message, 'error');
+    }
+  };
+
+  const handleEditClick = (item: any) => {
+    setEditingItem(item);
+    setEditPersonName(item.orang);
+    setEditQty(item.jumlah);
+    setEditCondition(item.kondisi);
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePersonnel = async () => {
+    if (!editPersonName.trim()) {
+      Swal.fire('Error', 'Nama personel harus diisi', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('inventaris_orang')
+        .update({
+          orang: editPersonName,
+          jumlah: editQty,
+          kondisi: editCondition
+        })
+        .eq('id', editingItem.id);
+
+      if (error) throw error;
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Berhasil!',
+        text: 'Data personel berhasil diperbarui',
+        timer: 1500,
+        showConfirmButton: false
+      });
+
+      setShowEditModal(false);
+      fetchDataOrang();
+    } catch (error: any) {
+      Swal.fire('Error', error.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -527,12 +579,23 @@ const InventarisOrang = () => {
                         </div>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-                      : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                      }`}>
-                      {item.kondisi?.toLowerCase().includes('rusak') ? '⚠️' : '✓'} {item.kondisi}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {item.type === 'permanent' && (
+                        <button
+                          onClick={() => handleEditClick(item)}
+                          className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Data"
+                        >
+                          <FaEdit size={14} />
+                        </button>
+                      )}
+                      <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                        : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                        }`}>
+                        {item.kondisi?.toLowerCase().includes('rusak') ? '⚠️' : '✓'} {item.kondisi}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -668,6 +731,104 @@ const InventarisOrang = () => {
                 className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
               >
                 Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Personnel Modal */}
+      {showEditModal && editingItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-white rounded-2xl md:rounded-3xl w-full max-w-lg overflow-hidden flex flex-col shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white flex-shrink-0 text-left">
+              <h2 className="text-lg md:text-xl font-bold text-slate-900 flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 bg-blue-600 rounded-lg md:rounded-xl text-white">
+                  <FaEdit className="text-sm md:text-base" />
+                </div>
+                Edit Data Personel
+              </h2>
+              <p className="text-xs md:text-sm text-gray-500 mt-1 ml-8 md:ml-14">Update data aset yang ditugaskan</p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 md:p-6 space-y-4 md:space-y-5 overflow-y-auto flex-1">
+              {/* Personnel Name */}
+              <div>
+                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+                  Nama Personel <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editPersonName}
+                  onChange={(e) => setEditPersonName(e.target.value)}
+                  placeholder="Contoh: John Doe"
+                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+
+              {/* Item Name (Static) */}
+              <div>
+                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+                  Nama Barang
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.nama}
+                  disabled
+                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-100 bg-gray-50 text-gray-500 rounded-xl outline-none cursor-not-allowed"
+                />
+              </div>
+
+              {/* Quantity and Condition */}
+              <div className="grid grid-cols-2 gap-3 md:gap-4">
+                <div>
+                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+                    Jumlah <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editQty}
+                    onChange={(e) => setEditQty(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+                    Kondisi
+                  </label>
+                  <select
+                    value={editCondition}
+                    onChange={(e) => setEditCondition(e.target.value)}
+                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  >
+                    <option value="Bagus">Bagus</option>
+                    <option value="Rusak Ringan">Rusak Ringan</option>
+                    <option value="Rusak Berat">Rusak Berat</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 md:p-6 border-t border-gray-200 flex gap-2 md:gap-3 justify-end bg-gray-50 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingItem(null);
+                }}
+                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all font-bold"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleUpdatePersonnel}
+                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
+              >
+                Update Data
               </button>
             </div>
           </div>
