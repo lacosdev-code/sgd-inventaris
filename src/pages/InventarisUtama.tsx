@@ -143,7 +143,8 @@ const InventarisUtama = () => {
   const filtered = items.filter(item =>
     item.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.kode_alat && item.kode_alat.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (item.lokasi && item.lokasi.toLowerCase().includes(searchTerm.toLowerCase()))
+    (item.lokasi && item.lokasi.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (item.kondisi && item.kondisi.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (

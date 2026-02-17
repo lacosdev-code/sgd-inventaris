@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { uploadImage } from '../services/imagekit';
 
 import { FaExchangeAlt, FaHistory, FaClock, FaCheckCircle, FaExclamationCircle, FaPlus, FaImage } from 'react-icons/fa';
 import Swal from 'sweetalert2';
@@ -70,12 +71,30 @@ const Peminjaman = () => {
             <input id="sw-peminjam" class="swal2-input w-full m-0 mt-1" placeholder="Nama Lengkap">
           </div>
           <div>
+            <label class="text-sm font-semibold text-gray-600">Nama Teknisi (Serah Terima)</label>
+            <input id="sw-teknisi" class="swal2-input w-full m-0 mt-1" placeholder="Nama Teknisi">
+          </div>
+          <div>
             <label class="text-sm font-semibold text-gray-600">Tanggal Pinjam</label>
             <input id="sw-tgl-pinjam" type="date" class="swal2-input w-full m-0 mt-1" value="${new Date().toISOString().split('T')[0]}">
           </div>
           <div>
             <label class="text-sm font-semibold text-gray-600">Rencana Kembali</label>
             <input id="sw-kembali" type="date" class="swal2-input w-full m-0 mt-1">
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Kondisi Awal</label>
+            <select id="sw-kondisi" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+              <option value="Baik / Normal">🟢 Baik / Normal</option>
+              <option value="Rusak Ringan">🟡 Rusak Ringan</option>
+              <option value="Rusak Berat">🔴 Rusak Berat</option>
+              <option value="Hilang">⚫ Hilang</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Foto Bukti Pinjam</label>
+            <input type="file" id="sw-foto" accept="image/*" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+            <p class="text-xs text-gray-400 mt-1">*Opsional, untuk bukti kondisi saat dipinjam</p>
           </div>
           <div>
             <label class="text-sm font-semibold text-gray-600">Catatan</label>
@@ -91,8 +110,11 @@ const Peminjaman = () => {
       preConfirm: () => {
         const barangId = (document.getElementById('sw-item') as HTMLSelectElement).value;
         const peminjam = (document.getElementById('sw-peminjam') as HTMLInputElement).value;
+        const teknisi = (document.getElementById('sw-teknisi') as HTMLInputElement)?.value || '';
         const tglPinjam = (document.getElementById('sw-tgl-pinjam') as HTMLInputElement).value;
         const tglKembali = (document.getElementById('sw-kembali') as HTMLInputElement).value;
+        const kondisi = (document.getElementById('sw-kondisi') as HTMLSelectElement)?.value || 'Baik / Normal';
+        const foto = (document.getElementById('sw-foto') as HTMLInputElement)?.files?.[0];
         const catatan = (document.getElementById('sw-catatan') as HTMLTextAreaElement).value;
 
         if (!barangId || !peminjam || !tglPinjam || !tglKembali) {
@@ -103,8 +125,11 @@ const Peminjaman = () => {
         return {
           barang_id: barangId,
           peminjam: peminjam,
+          teknisi: teknisi,
           tgl_pinjam: tglPinjam,
           tgl_kembali_rencana: tglKembali,
+          kondisi: kondisi,
+          foto: foto,
           catatan: catatan
         }
       }
@@ -114,21 +139,42 @@ const Peminjaman = () => {
         const selectedItem = availableItems.find(i => i.id == formValues.barang_id);
 
         try {
-          // 1. Simpan Transaksi Peminjaman
-          const { error: loanError } = await supabase.from('peminjaman').insert([{
+          // Show loading
+          Swal.fire({
+            title: 'Memproses...',
+            html: 'Mengupload foto dan menyimpan data...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+          });
+
+          // 1. Upload Photo (if exists)
+          let photoUrl = '';
+          if (formValues.foto) {
+            try {
+              photoUrl = await uploadImage(formValues.foto);
+            } catch (uploadErr) {
+              console.error('Upload failed:', uploadErr);
+              throw new Error("Gagal upload foto. Periksa koneksi internet.");
+            }
+          }
+
+          // 2. Insert Loan Record with new fields
+          const { data: loanData, error: loanError } = await supabase.from('peminjaman').insert([{
             barang_id: parseInt(formValues.barang_id),
             peminjam: formValues.peminjam,
+            teknisi_pinjam: formValues.teknisi,
             tgl_kembali_rencana: formValues.tgl_kembali_rencana,
             barang_nama: selectedItem?.nama || 'Unknown Item',
             tgl_pinjam: formValues.tgl_pinjam,
             status: 'dipinjam',
             catatan: formValues.catatan,
-            foto_bukti_url: null
-          }]);
+            kondisi_pinjam: formValues.kondisi,
+            foto_bukti_url: photoUrl
+          }]).select();
 
           if (loanError) throw loanError;
 
-          // 2. Kurangi Stok Barang (Update Inventaris)
+          // 3. Reduce Stock
           const newStock = (selectedItem?.jumlah_tersedia || 0) - 1;
           const { error: stockError } = await supabase
             .from('inventaris_utama')
@@ -136,6 +182,41 @@ const Peminjaman = () => {
             .eq('id', parseInt(formValues.barang_id));
 
           if (stockError) console.error("Gagal update stok:", stockError);
+
+          // 4. Create Activity Log
+          const logDetails = {
+            teknisi: formValues.teknisi,
+            type: 'Pinjam',
+            item_id: parseInt(formValues.barang_id),
+            item_name: selectedItem?.nama || 'Unknown Item',
+            condition: formValues.kondisi,
+            notes: formValues.catatan,
+            photo_url: photoUrl,
+            timestamp: new Date().toISOString()
+          };
+
+          const { error: logError } = await supabase
+            .from('activity_logs')
+            .insert([{
+              user_email: 'System Tracker',
+              action: 'CONDITION_LOG',
+              table_name: 'peminjaman',
+              record_id: loanData?.[0]?.id || 0,
+              details: logDetails
+            }]);
+
+          if (logError) console.error("Log failed", logError);
+
+          // 5. Add photo to gallery
+          if (photoUrl) {
+            const { error: galleryError } = await supabase
+              .from('tool_images')
+              .insert({
+                tool_id: parseInt(formValues.barang_id),
+                image_url: photoUrl
+              });
+            if (galleryError) console.error("Gallery insert failed:", galleryError);
+          }
 
           Swal.fire({
             icon: 'success',
@@ -154,62 +235,170 @@ const Peminjaman = () => {
   };
 
   const handleReturn = async (loan: any) => {
-    const result = await Swal.fire({
-      title: 'Konfirmasi Pengembalian',
+    await Swal.fire({
+      title: '<span class="text-[#013220] font-bold">Form Pengembalian Alat</span>',
       html: `
-        <div class="text-left">
-            <p class="mb-2">Apakah <b>${loan.barang_nama}</b> sudah dikembalikan oleh <b>${loan.peminjam}</b>?</p>
-            ${loan.foto_bukti_url ? `<p class="text-xs text-gray-500 mb-1">Foto Bukti Pinjam:</p><img src="${loan.foto_bukti_url}" class="w-32 h-32 object-cover rounded-lg border border-gray-200" />` : ''}
+        <div class="flex flex-col gap-3 text-left">
+          <div class="bg-slate-50 p-3 rounded-lg mb-2">
+            <p class="text-sm"><b>Barang:</b> ${loan.barang_nama}</p>
+            <p class="text-sm"><b>Peminjam:</b> ${loan.peminjam}</p>
+            ${loan.foto_bukti_url ? `<p class="text-xs text-gray-500 mt-2">Foto Pinjam:</p><img src="${loan.foto_bukti_url}" class="w-24 h-24 object-cover rounded-lg border mt-1" />` : ''}
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Nama Teknisi (Penerima)</label>
+            <input id="sw-teknisi-kembali" class="swal2-input w-full m-0 mt-1" placeholder="Nama Teknisi">
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Kondisi Saat Kembali</label>
+            <select id="sw-kondisi-kembali" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+              <option value="Baik / Normal">🟢 Baik / Normal</option>
+              <option value="Rusak Ringan">🟡 Rusak Ringan</option>
+              <option value="Rusak Berat">🔴 Rusak Berat</option>
+              <option value="Hilang">⚫ Hilang</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Foto Bukti Kembali</label>
+            <input type="file" id="sw-foto-kembali" accept="image/*" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+            <p class="text-xs text-gray-400 mt-1">*Opsional, untuk bukti kondisi saat dikembalikan</p>
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-gray-600">Catatan Pengembalian</label>
+            <textarea id="sw-catatan-kembali" class="swal2-textarea w-full m-0 mt-1" placeholder="Kondisi saat dikembalikan..."></textarea>
+          </div>
         </div>
       `,
-      icon: 'question',
+      focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: 'Ya, Sudah Kembali',
+      confirmButtonText: 'Konfirmasi Pengembalian',
       confirmButtonColor: '#013220',
-      cancelButtonText: 'Batal'
-    });
+      cancelButtonColor: '#94a3b8',
+      preConfirm: () => {
+        const teknisi = (document.getElementById('sw-teknisi-kembali') as HTMLInputElement)?.value || '';
+        const kondisi = (document.getElementById('sw-kondisi-kembali') as HTMLSelectElement)?.value || 'Baik / Normal';
+        const foto = (document.getElementById('sw-foto-kembali') as HTMLInputElement)?.files?.[0];
+        const catatan = (document.getElementById('sw-catatan-kembali') as HTMLTextAreaElement)?.value || '';
 
-    if (result.isConfirmed) {
-      try {
-        // 1. Update Status Peminjaman
-        const { error: loanError } = await supabase
-          .from('peminjaman')
-          .update({
-            status: 'kembali',
-            tgl_kembali_aktual: new Date().toISOString()
-          })
-          .eq('id', loan.id);
-
-        if (loanError) throw loanError;
-
-        // 2. Kembalikan Stok Barang (Increment)
-        // Ambil stok terbaru dulu untuk amannya
-        const { data: currentItem } = await supabase
-          .from('inventaris_utama')
-          .select('jumlah_tersedia')
-          .eq('id', loan.barang_id)
-          .single();
-
-        if (currentItem) {
-          const { error: stockError } = await supabase
-            .from('inventaris_utama')
-            .update({ jumlah_tersedia: currentItem.jumlah_tersedia + 1 })
-            .eq('id', loan.barang_id);
-
-          if (stockError) console.error("Gagal kembalikan stok:", stockError);
-        }
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Dikembalikan!',
-          text: 'Stok barang otomatis bertambah.',
-          confirmButtonColor: '#013220'
-        });
-        fetchData();
-      } catch (err: any) {
-        Swal.fire('Error', err.message, 'error');
+        return {
+          teknisi,
+          kondisi,
+          foto,
+          catatan
+        };
       }
-    }
+    }).then(async (result) => {
+
+      if (result.isConfirmed && result.value) {
+        const formValues = result.value;
+        try {
+          // Show loading
+          Swal.fire({
+            title: 'Memproses...',
+            html: 'Mengupload foto dan menyimpan data...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+          });
+
+          // 1. Upload Return Photo (if exists)
+          let photoUrl = '';
+          if (formValues.foto) {
+            try {
+              photoUrl = await uploadImage(formValues.foto);
+            } catch (uploadErr) {
+              console.error('Upload failed:', uploadErr);
+              throw new Error("Gagal upload foto. Periksa koneksi internet.");
+            }
+          }
+
+          // 2. Update Loan Status with return fields
+          const { error: loanError } = await supabase
+            .from('peminjaman')
+            .update({
+              status: 'kembali',
+              tgl_kembali_aktual: new Date().toISOString(),
+              teknisi_kembali: formValues.teknisi,
+              kondisi_kembali: formValues.kondisi,
+              foto_kembali_url: photoUrl,
+              catatan_kembali: formValues.catatan
+            })
+            .eq('id', loan.id);
+
+          if (loanError) throw loanError;
+
+          // 3. Restore Stock
+          const { data: currentItem } = await supabase
+            .from('inventaris_utama')
+            .select('jumlah_tersedia')
+            .eq('id', loan.barang_id)
+            .single();
+
+          if (currentItem) {
+            const { error: stockError } = await supabase
+              .from('inventaris_utama')
+              .update({ jumlah_tersedia: currentItem.jumlah_tersedia + 1 })
+              .eq('id', loan.barang_id);
+
+            if (stockError) console.error("Gagal kembalikan stok:", stockError);
+          }
+
+          // 4. Create Activity Log for Return
+          const logDetails = {
+            teknisi: formValues.teknisi,
+            type: 'Kembali',
+            item_id: loan.barang_id,
+            item_name: loan.barang_nama,
+            condition: formValues.kondisi,
+            notes: formValues.catatan,
+            photo_url: photoUrl,
+            timestamp: new Date().toISOString()
+          };
+
+          const { error: logError } = await supabase
+            .from('activity_logs')
+            .insert([{
+              user_email: 'System Tracker',
+              action: 'CONDITION_LOG',
+              table_name: 'peminjaman',
+              record_id: loan.id,
+              details: logDetails
+            }]);
+
+          if (logError) console.error("Log failed", logError);
+
+          // 5. Add return photo to gallery
+          if (photoUrl) {
+            const { error: galleryError } = await supabase
+              .from('tool_images')
+              .insert({
+                tool_id: loan.barang_id,
+                image_url: photoUrl
+              });
+            if (galleryError) console.error("Gallery insert failed:", galleryError);
+          }
+
+          // 6. Also add borrow photo to gallery if it exists
+          if (loan.foto_bukti_url) {
+            const { error: galleryError } = await supabase
+              .from('tool_images')
+              .insert({
+                tool_id: loan.barang_id,
+                image_url: loan.foto_bukti_url
+              });
+            if (galleryError) console.error("Gallery insert failed:", galleryError);
+          }
+
+          Swal.fire({
+            icon: 'success',
+            title: 'Dikembalikan!',
+            text: 'Stok barang otomatis bertambah.',
+            confirmButtonColor: '#013220'
+          });
+          fetchData();
+        } catch (err: any) {
+          Swal.fire('Error', err.message, 'error');
+        }
+      }
+    });
   };
 
   return (
