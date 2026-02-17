@@ -12,7 +12,7 @@ import {
   Title
 } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
-import { FaBox, FaExclamationTriangle, FaExchangeAlt, FaMapMarkerAlt, FaCheckCircle, FaSpinner, FaCalendarTimes } from 'react-icons/fa';
+import { FaBox, FaExclamationTriangle, FaExchangeAlt, FaMapMarkerAlt, FaCheckCircle, FaSpinner, FaCalendarTimes, FaUsers } from 'react-icons/fa';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
@@ -24,7 +24,9 @@ const Dashboard = () => {
     barangRusak: 0,
     totalPinjam: 0,
     maintenanceCount: 0,
-    lokasiData: {} as any
+    lokasiData: {} as any,
+    totalPersonnel: 0,
+    personnelItemsData: {} as any
   });
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +49,11 @@ const Dashboard = () => {
         .select('*')
         .eq('status', 'dipinjam');
 
+      // 3. Ambil data inventaris per orang
+      const { data: personnelItems } = await supabase
+        .from('inventaris_orang')
+        .select('*');
+
       if (items) {
         // Normalisasi kondisi agar case-insensitive
         const bagus = items.filter(i => i.kondisi?.toLowerCase() === 'bagus' || i.kondisi?.toLowerCase() === 'baik').length;
@@ -68,13 +75,43 @@ const Dashboard = () => {
           return acc;
         }, {});
 
+        // Hitung statistik personel
+        const personnelMap: any = {};
+
+        // Count permanent items per person
+        if (personnelItems) {
+          personnelItems.forEach((item: any) => {
+            const person = item.orang;
+            personnelMap[person] = (personnelMap[person] || 0) + (item.jumlah || 1);
+          });
+        }
+
+        // Count active loans per person
+        if (loans) {
+          loans.forEach((loan: any) => {
+            const person = loan.peminjam;
+            personnelMap[person] = (personnelMap[person] || 0) + 1;
+          });
+        }
+
+        // Sort by item count and take top 10
+        const sortedPersonnel = Object.entries(personnelMap)
+          .sort(([, a]: any, [, b]: any) => b - a)
+          .slice(0, 10)
+          .reduce((acc: any, [name, count]) => {
+            acc[name] = count;
+            return acc;
+          }, {});
+
         setStats({
           totalBarang: items.length,
           barangBagus: bagus,
           barangRusak: rusak,
           totalPinjam: loans ? loans.length : 0,
           maintenanceCount: needsMaintenance.length,
-          lokasiData: lokasiMap
+          lokasiData: lokasiMap,
+          totalPersonnel: Object.keys(personnelMap).length,
+          personnelItemsData: sortedPersonnel
         });
       }
     } catch (error: any) {
@@ -115,6 +152,24 @@ const Dashboard = () => {
       borderRadius: 12,
       borderSkipped: false,
       hoverBackgroundColor: 'rgba(170, 133, 34, 1)',
+    }]
+  };
+
+  const personnelBarData = {
+    labels: Object.keys(stats.personnelItemsData),
+    datasets: [{
+      label: 'Jumlah Item',
+      data: Object.values(stats.personnelItemsData),
+      backgroundColor: (context: any) => {
+        const ctx = context.chart.ctx;
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(147, 51, 234, 1)');
+        gradient.addColorStop(1, 'rgba(147, 51, 234, 0.6)');
+        return gradient;
+      },
+      borderRadius: 12,
+      borderSkipped: false,
+      hoverBackgroundColor: 'rgba(126, 34, 206, 1)',
     }]
   };
 
@@ -168,7 +223,7 @@ const Dashboard = () => {
         )}
 
         {/* Statistik Ringkas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <StatCard
             icon={<FaBox />}
             title="Total Aset"
@@ -196,6 +251,13 @@ const Dashboard = () => {
             value={stats.totalPinjam}
             colorClass="bg-[#D4AF37]/20 text-[#D4AF37]"
             onClick={() => navigate('/peminjaman')}
+          />
+          <StatCard
+            icon={<FaUsers />}
+            title="Total Personel"
+            value={stats.totalPersonnel}
+            colorClass="bg-purple-100 text-purple-600"
+            onClick={() => navigate('/inventaris-orang')}
           />
         </div>
 
@@ -311,6 +373,73 @@ const Dashboard = () => {
                         callbacks: {
                           label: function (context: any) {
                             return `Jumlah: ${context.parsed.y} unit`;
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        grid: {
+                          color: 'rgba(148, 163, 184, 0.1)',
+                          lineWidth: 1
+                        },
+                        ticks: {
+                          font: { size: 12, weight: 600, family: 'Outfit' },
+                          color: '#64748b',
+                          padding: 8
+                        },
+                        border: { display: false }
+                      },
+                      x: {
+                        grid: { display: false },
+                        ticks: {
+                          font: { size: 12, weight: 700, family: 'Outfit' },
+                          color: '#1e293b',
+                          padding: 8
+                        },
+                        border: { display: false }
+                      }
+                    },
+                    animation: {
+                      duration: 1500,
+                      easing: 'easeInOutQuart'
+                    }
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Personnel Bar Chart */}
+          <div className="bg-white p-10 rounded-3xl shadow-modern-lg border border-gray-100/50 hover:shadow-modern-xl transition-all duration-500 group">
+            <h3 className="text-xl font-black text-slate-900 mb-8 pb-4 border-b-2 border-gray-100 flex items-center gap-3">
+              <div className="p-2 bg-purple-50 rounded-xl text-purple-700 group-hover:scale-110 transition-transform duration-300">
+                <FaUsers />
+              </div>
+              Distribusi Item Per Personel
+            </h3>
+            <div className="h-64">
+              {Object.keys(stats.personnelItemsData).length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-400 font-medium">Belum ada data</div>
+              ) : (
+                <Bar
+                  data={personnelBarData}
+                  options={{
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        titleFont: { size: 14, weight: 'bold', family: 'Outfit' },
+                        bodyFont: { size: 13, family: 'Outfit' },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true,
+                        callbacks: {
+                          label: function (context: any) {
+                            return `Jumlah: ${context.parsed.y} item`;
                           }
                         }
                       }
