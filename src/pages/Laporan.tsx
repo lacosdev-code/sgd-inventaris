@@ -9,6 +9,7 @@ import {
     FaFilePdf, FaFileExcel, FaChartBar, FaCalendarAlt,
     FaBox, FaExchangeAlt, FaTools, FaSearch
 } from 'react-icons/fa';
+import { FiX } from 'react-icons/fi';
 
 const Laporan = () => {
     const [activeTab, setActiveTab] = useState('stok'); // stok, peminjaman, maintenance
@@ -16,6 +17,10 @@ const Laporan = () => {
     const [loans, setLoans] = useState<any[]>([]);
     const [maintenanceItems, setMaintenanceItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // State for PDF Preview
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
     // Date Filter
     const [startDate, setStartDate] = useState(
@@ -89,7 +94,7 @@ const Laporan = () => {
         });
     };
 
-    const exportPDF = async () => {
+    const generatePDF = async () => {
         const doc = new jsPDF();
         const title = activeTab === 'stok' ? 'LAPORAN STOK ASET' :
             activeTab === 'peminjaman' ? 'LAPORAN PEMINJAMAN' : 'JADWAL MAINTENANCE';
@@ -203,6 +208,19 @@ const Laporan = () => {
             }
         });
 
+        return doc;
+    };
+
+    const handlePreviewPDF = async () => {
+        const doc = await generatePDF();
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        setPdfUrl(url);
+        setShowPdfPreview(true);
+    };
+
+    const exportPDF = async () => { // Keep for backward compatibility if needed, or just redirect
+        const doc = await generatePDF();
         doc.save(`Laporan_${activeTab}_${Date.now()}.pdf`);
     };
 
@@ -264,10 +282,10 @@ const Laporan = () => {
                         <FaFileExcel /> Excel
                     </button>
                     <button
-                        onClick={exportPDF}
+                        onClick={handlePreviewPDF}
                         className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition shadow-sm font-semibold"
                     >
-                        <FaFilePdf /> PDF
+                        <FaFilePdf /> Preview PDF
                     </button>
                 </div>
             </div>
