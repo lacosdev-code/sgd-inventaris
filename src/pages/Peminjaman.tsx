@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { uploadImage } from '../services/imagekit';
+
 import { FaExchangeAlt, FaHistory, FaClock, FaCheckCircle, FaExclamationCircle, FaPlus, FaImage } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
@@ -70,20 +70,16 @@ const Peminjaman = () => {
             <input id="sw-peminjam" class="swal2-input w-full m-0 mt-1" placeholder="Nama Lengkap">
           </div>
           <div>
+            <label class="text-sm font-semibold text-gray-600">Tanggal Pinjam</label>
+            <input id="sw-tgl-pinjam" type="date" class="swal2-input w-full m-0 mt-1" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+          <div>
             <label class="text-sm font-semibold text-gray-600">Rencana Kembali</label>
             <input id="sw-kembali" type="date" class="swal2-input w-full m-0 mt-1">
           </div>
           <div>
-            <label class="text-sm font-semibold text-gray-600">Foto Bukti / Identitas</label>
-            <input id="sw-foto" type="file" accept="image/*" class="w-full mt-1 text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-full file:border-0
-              file:text-sm file:font-semibold
-              file:bg-[#013220]/10 file:text-[#013220]
-              hover:file:bg-[#013220]/20 cursor-pointer
-            ">
-            <div id="upload-status" class="text-xs mt-1 text-gray-400 font-medium">Wajib upload foto untuk mengaktifkan tombol.</div>
-            <input type="hidden" id="sw-foto-url">
+            <label class="text-sm font-semibold text-gray-600">Catatan</label>
+            <textarea id="sw-catatan" class="swal2-textarea w-full m-0 mt-1" placeholder="Keperluan / Kondisi awal..."></textarea>
           </div>
         </div>
       `,
@@ -92,66 +88,24 @@ const Peminjaman = () => {
       confirmButtonText: 'Konfirmasi Pinjam',
       confirmButtonColor: '#013220',
       cancelButtonColor: '#94a3b8',
-      didOpen: () => {
-        const confirmBtn = Swal.getConfirmButton();
-        const fileInput = document.getElementById('sw-foto') as HTMLInputElement;
-        const statusDiv = document.getElementById('upload-status') as HTMLDivElement;
-        const urlInput = document.getElementById('sw-foto-url') as HTMLInputElement;
-
-        // Disable button initially
-        if (confirmBtn) {
-          confirmBtn.disabled = true;
-          confirmBtn.style.opacity = '0.5';
-          confirmBtn.style.cursor = 'not-allowed';
-        }
-
-        // Handle File Upload
-        fileInput.addEventListener('change', async (e: any) => {
-          const file = e.target.files[0];
-          if (file) {
-            // Set Loading State
-            if (confirmBtn) {
-              confirmBtn.textContent = 'Mengupload...';
-            }
-            statusDiv.innerHTML = '<span class="text-slate-600 animate-pulse flex items-center gap-1"><span class="w-3 h-3 bg-slate-600 rounded-full animate-ping"></span> Sedang mengupload ke ImageKit...</span>';
-
-            try {
-              const url = await uploadImage(file);
-              urlInput.value = url;
-
-              statusDiv.innerHTML = `<span class="text-green-600 font-bold flex items-center gap-1">✓ Upload Sukses!</span>`;
-
-              // Enable Button
-              if (confirmBtn) {
-                confirmBtn.disabled = false;
-                confirmBtn.style.opacity = '1';
-                confirmBtn.style.cursor = 'pointer';
-                confirmBtn.textContent = 'Konfirmasi Pinjam';
-              }
-            } catch (err) {
-              statusDiv.innerHTML = '<span class="text-red-500 font-bold">⚠ Gagal upload. Pastikan koneksi aman.</span>';
-              console.error(err);
-              if (confirmBtn) confirmBtn.textContent = 'Konfirmasi Pinjam';
-            }
-          }
-        });
-      },
       preConfirm: () => {
         const barangId = (document.getElementById('sw-item') as HTMLSelectElement).value;
         const peminjam = (document.getElementById('sw-peminjam') as HTMLInputElement).value;
+        const tglPinjam = (document.getElementById('sw-tgl-pinjam') as HTMLInputElement).value;
         const tglKembali = (document.getElementById('sw-kembali') as HTMLInputElement).value;
-        const fotoUrl = (document.getElementById('sw-foto-url') as HTMLInputElement).value;
+        const catatan = (document.getElementById('sw-catatan') as HTMLTextAreaElement).value;
 
-        if (!barangId || !peminjam || !tglKembali || !fotoUrl) {
-          Swal.showValidationMessage('Semua data wajib diisi, termasuk foto!');
+        if (!barangId || !peminjam || !tglPinjam || !tglKembali) {
+          Swal.showValidationMessage('Mohon lengkapi semua data wajib!');
           return false;
         }
 
         return {
           barang_id: barangId,
           peminjam: peminjam,
+          tgl_pinjam: tglPinjam,
           tgl_kembali_rencana: tglKembali,
-          foto_bukti_url: fotoUrl
+          catatan: catatan
         }
       }
     }).then(async (result) => {
@@ -166,9 +120,10 @@ const Peminjaman = () => {
             peminjam: formValues.peminjam,
             tgl_kembali_rencana: formValues.tgl_kembali_rencana,
             barang_nama: selectedItem?.nama || 'Unknown Item',
-            tgl_pinjam: new Date().toISOString(),
+            tgl_pinjam: formValues.tgl_pinjam,
             status: 'dipinjam',
-            foto_bukti_url: formValues.foto_bukti_url
+            catatan: formValues.catatan,
+            foto_bukti_url: null
           }]);
 
           if (loanError) throw loanError;

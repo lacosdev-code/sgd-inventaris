@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useInventaris } from '../hooks/useInventaris';
 import { supabase } from '../services/supabase';
+import { uploadToolImage } from '../actions/uploadAction';
 import { QRCodeSVG } from 'qrcode.react';
-import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload } from 'react-icons/fi';
+import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload, FiEdit, FiImage } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 // Import QRScanner
@@ -99,83 +100,135 @@ const InventarisUtama = () => {
     });
   };
 
-  // Fungsi Tambah Manual (Single Item)
-  const handleTambahManual = async () => {
+  // Fungsi Tambah / Edit Item
+  const handleAddOrEdit = async (itemToEdit?: any) => {
+    const isEdit = !!itemToEdit;
+    const title = isEdit ? '✏️ Edit Item' : '➕ Tambah Item Baru';
+    const confirmText = isEdit ? '💾 Simpan Perubahan' : '💾 Simpan Item';
+
     const { value: formValues } = await Swal.fire({
-      title: '<span class="text-2xl font-black text-slate-900">➕ Tambah Item Baru</span>',
+      title: `<span class="text-2xl font-black text-slate-900">${title}</span>`,
       html: `
         <div class="text-left space-y-4 p-2">
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Nama Barang <span class="text-red-500">*</span></label>
-            <input id="sw-nama" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Contoh: Mesin Bor Kecil" />
+          ${isEdit ? `<input type="hidden" id="sw-id" value="${itemToEdit.id}">` : ''}
+          
+          <div class="flex gap-4">
+             <div class="flex-1">
+                <label class="block text-sm font-bold text-slate-700 mb-2">Nama Barang <span class="text-red-500">*</span></label>
+                <input id="sw-nama" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Contoh: Mesin Bor" value="${itemToEdit?.nama || ''}" />
+             </div>
+             <div class="w-1/3">
+                <label class="block text-sm font-bold text-slate-700 mb-2">Kode Alat <span class="text-red-500">*</span></label>
+                <input id="sw-kode" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all font-mono" placeholder="KODE-001" value="${itemToEdit?.kode_alat || ''}" ${isEdit ? 'readonly class="bg-slate-100 text-slate-500 cursor-not-allowed"' : ''} />
+             </div>
           </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Kode Alat <span class="text-red-500">*</span></label>
-            <input id="sw-kode" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all font-mono" placeholder="Contoh: SGD-BOR-001" />
-          </div>
+
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-2">Jumlah <span class="text-red-500">*</span></label>
-              <input id="sw-jumlah" type="number" min="1" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="5" />
+              <label class="block text-sm font-bold text-slate-700 mb-2">Jumlah Total <span class="text-red-500">*</span></label>
+              <input id="sw-jumlah" type="number" min="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="0" value="${itemToEdit?.jumlah || ''}" />
             </div>
             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-2">Kondisi <span class="text-red-500">*</span></label>
-              <select id="sw-kondisi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all">
-                <option value="bagus">✓ Bagus</option>
-                <option value="rusak">⚠️ Rusak</option>
-              </select>
+              <label class="block text-sm font-bold text-slate-700 mb-2">Stok Tersedia</label>
+              <input id="sw-tersedia" type="number" min="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="0" value="${itemToEdit?.jumlah_tersedia || ''}" />
             </div>
           </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Lokasi</label>
-            <input id="sw-lokasi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Contoh: Gudang Wijaya" />
+
+          <div class="grid grid-cols-2 gap-3">
+             <div>
+              <label class="block text-sm font-bold text-slate-700 mb-2">Kondisi</label>
+              <select id="sw-kondisi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all">
+                <option value="bagus" ${itemToEdit?.kondisi === 'bagus' ? 'selected' : ''}>✓ Bagus</option>
+                <option value="rusak" ${itemToEdit?.kondisi === 'rusak' ? 'selected' : ''}>⚠️ Rusak</option>
+              </select>
+            </div>
+            <div>
+               <label class="block text-sm font-bold text-slate-700 mb-2">Lokasi</label>
+               <input id="sw-lokasi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Gudang A" value="${itemToEdit?.lokasi || ''}" />
+            </div>
           </div>
+
+          <div>
+             <label class="block text-sm font-bold text-slate-700 mb-2">Foto Barang</label>
+             <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors relative group">
+                ${itemToEdit?.foto_url ? `<img src="${itemToEdit.foto_url}" class="h-20 w-auto mx-auto mb-2 rounded-lg" />` : '<FiImage class="mx-auto text-2xl mb-2" />'}
+                <span class="text-xs font-semibold" id="file-label text-slate-500">${itemToEdit?.foto_url ? 'Ganti Foto' : 'Upload Foto'}'}</span>
+                <input type="file" id="sw-foto" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onchange="document.getElementById('file-label').innerText = this.files[0].name; document.getElementById('preview-container').style.display='none';">
+                <div id="preview-container"></div>
+             </div>
+          </div>
+
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: '💾 Simpan Item',
+      confirmButtonText: confirmText,
       cancelButtonText: 'Batal',
       confirmButtonColor: '#C5A02D',
       cancelButtonColor: '#64748b',
       width: '600px',
-      customClass: {
-        popup: 'rounded-3xl',
-        confirmButton: 'font-black px-6 py-3 rounded-xl',
-        cancelButton: 'font-bold px-6 py-3 rounded-xl'
-      },
       preConfirm: () => {
         const nama = (document.getElementById('sw-nama') as HTMLInputElement).value;
         const kode = (document.getElementById('sw-kode') as HTMLInputElement).value;
         const jumlah = parseInt((document.getElementById('sw-jumlah') as HTMLInputElement).value);
+        const tersedia = parseInt((document.getElementById('sw-tersedia') as HTMLInputElement).value); // Allow editing available stock separately if needed
         const kondisi = (document.getElementById('sw-kondisi') as HTMLSelectElement).value;
         const lokasi = (document.getElementById('sw-lokasi') as HTMLInputElement).value || '-';
+        const fotoFile = (document.getElementById('sw-foto') as HTMLInputElement).files?.[0];
 
-        if (!nama || !kode || !jumlah) {
+        if (!nama || !kode || isNaN(jumlah)) {
           Swal.showValidationMessage('Nama, Kode, dan Jumlah wajib diisi!');
           return false;
         }
 
-        return { nama, kode_alat: kode, jumlah, jumlah_tersedia: jumlah, kondisi, lokasi };
+        return {
+          nama,
+          kode_alat: kode,
+          jumlah,
+          jumlah_tersedia: isNaN(tersedia) ? jumlah : tersedia, // If empty, default to total
+          kondisi,
+          lokasi,
+          fotoFile
+        };
       }
     });
 
     if (formValues) {
       try {
-        const { error } = await supabase
-          .from('inventaris_utama')
-          .insert([formValues]);
+        let photoUrl = itemToEdit?.foto_url || null;
 
-        if (error) throw error;
+        if (formValues.fotoFile) {
+          Swal.fire({
+            title: 'Mengupload Foto...',
+            text: 'Mohon tunggu sebentar',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+          });
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Berhasil!',
-          text: `${formValues.nama} berhasil ditambahkan ke inventaris.`,
-          confirmButtonColor: '#C5A02D',
-          timer: 2000
-        });
+          // Gunakan Server Action Adapter
+          const formData = new FormData();
+          formData.append('file', formValues.fotoFile);
 
-        window.location.reload();
+          const uploadRes = await uploadToolImage(formData);
+
+          if (!uploadRes.success || !uploadRes.url) {
+            throw new Error(uploadRes.error || "Gagal upload foto");
+          }
+          photoUrl = uploadRes.url;
+
+          Swal.close();
+        }
+
+        const payload = {
+          ...formValues,
+          foto_url: photoUrl
+        };
+        delete payload.fotoFile; // Don't send file object to Supabase
+
+        await upsertItem(payload);
+
+        // Success handled by upsertItem or useInventaris, but we can double check
+        // useInventaris usually handles alert, but let's be safe.
+
       } catch (error: any) {
         Swal.fire({
           icon: 'error',
@@ -189,7 +242,8 @@ const InventarisUtama = () => {
 
   const filtered = items.filter(item =>
     item.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.kode_alat.toLowerCase().includes(searchTerm.toLowerCase())
+    (item.kode_alat && item.kode_alat.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (item.lokasi && item.lokasi.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -258,7 +312,7 @@ const InventarisUtama = () => {
 
           {/* Tombol Tambah */}
           <button
-            onClick={handleTambahManual}
+            onClick={() => handleAddOrEdit()}
             className="relative overflow-hidden bg-gold-gradient text-white px-6 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
@@ -277,6 +331,7 @@ const InventarisUtama = () => {
                 <th className="p-5 font-black">Stok (Sisa/Total)</th>
                 <th className="p-5 font-black">Kondisi</th>
                 <th className="p-5 font-black">Lokasi</th>
+                <th className="p-5 font-black text-center">Foto</th>
                 <th className="p-5 font-black text-center">QR Code</th>
                 <th className="p-5 font-black text-center">Aksi</th>
               </tr>
@@ -327,22 +382,42 @@ const InventarisUtama = () => {
                       <span className="text-slate-700 font-semibold">{item.lokasi}</span>
                     </div>
                   </td>
+                  <td className="p-5 text-center">
+                    {item.foto_url ? (
+                      <div className="w-12 h-12 mx-auto rounded-lg overflow-hidden border border-slate-200 shadow-sm hover:scale-150 transition-transform origin-center cursor-pointer z-10 relative bg-white">
+                        <img src={item.foto_url} alt={item.nama} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 mx-auto rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-300">
+                        <FiImage />
+                      </div>
+                    )}
+                  </td>
                   <td className="p-5 flex justify-center">
                     <div className="relative group/qr">
                       <div className="absolute inset-0 bg-sgd-400 rounded-2xl blur-md opacity-0 group-hover/qr:opacity-30 transition-opacity duration-300"></div>
                       <div className="relative bg-white p-2.5 rounded-2xl border-2 border-slate-200 group-hover/qr:border-sgd-400 group-hover/qr:scale-125 transition-all duration-300 shadow-sm group-hover/qr:shadow-lg">
-                        <QRCodeSVG value={item.kode_alat} size={40} />
+                        <QRCodeSVG value={`https://inventaris.sgd-corp.com/detail/${item.kode_alat}`} size={40} />
                       </div>
                     </div>
                   </td>
                   <td className="p-5 text-center">
-                    <button
-                      onClick={() => item.id && deleteItem(item.id)}
-                      className="group/del p-3 text-slate-400 hover:text-white hover:bg-gradient-to-r hover:from-red-500 hover:to-red-600 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
-                      title="Hapus Item"
-                    >
-                      <FiTrash className="text-lg" />
-                    </button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => handleAddOrEdit(item)}
+                        className="group/edit p-3 text-slate-400 hover:text-white hover:bg-sgd-500 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
+                        title="Edit Item"
+                      >
+                        <FiEdit className="text-lg" />
+                      </button>
+                      <button
+                        onClick={() => item.id && deleteItem(item.id)}
+                        className="group/del p-3 text-slate-400 hover:text-white hover:bg-gradient-to-r hover:from-red-500 hover:to-red-600 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
+                        title="Hapus Item"
+                      >
+                        <FiTrash className="text-lg" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

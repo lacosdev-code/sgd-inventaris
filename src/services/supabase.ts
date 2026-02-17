@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { InventoryItem, PersonnelItem, BorrowingRecord } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
-const SUPABASE_URL = 'https://avqrlyotdhxxrothetgp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_U6k1iNEts-9kjcZBY9vyIA_bsliBOUQ';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 

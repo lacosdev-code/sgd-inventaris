@@ -28,4 +28,12 @@ export interface BorrowingRecord {
     borrowed_date: string;
     returned_date?: string;
     notes?: string;
+    // New fields for DetailAlat
+    foto_pinjam?: string;
+    kondisi_pinjam?: string;
+    foto_kembali?: string;
+    kondisi_kembali?: string;
+    peminjam?: string;
+    barang_id?: string;
+    barang_nama?: string;
 }

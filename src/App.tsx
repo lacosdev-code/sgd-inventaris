@@ -14,6 +14,8 @@ import InventarisUtama from './pages/InventarisUtama';
 import InventarisOrang from './pages/InventarisOrang';
 import Peminjaman from './pages/Peminjaman';
 import ActivityLog from './pages/ActivityLog';
+import KondisiAlat from './pages/KondisiAlat';
+import DetailAlat from './pages/DetailAlat'; // Import Detail Page
 
 // --- SIDEBAR COMPONENT ---
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) => {
@@ -40,6 +42,7 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
     { path: '/utama', name: 'Inventaris Utama', icon: <FiBox /> },
     { path: '/orang', name: 'Inventaris Orang', icon: <FiUsers /> },
     { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat /> },
+    { path: '/kondisi', name: 'Kondisi & Serah Terima', icon: <FiTool /> }, // New Menu Item
     { path: '/log', name: 'Log Aktivitas', icon: <FiClock /> },
   ];
 
@@ -216,6 +219,8 @@ const AppContent = () => {
               <Route path="/utama" element={<InventarisUtama />} />
               <Route path="/orang" element={<InventarisOrang />} />
               <Route path="/peminjaman" element={<Peminjaman />} />
+              <Route path="/kondisi" element={<KondisiAlat />} />
+              <Route path="/detail/:id" element={<DetailAlat />} /> {/* New Dynamic Route */}
               <Route path="/log" element={<ActivityLog />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

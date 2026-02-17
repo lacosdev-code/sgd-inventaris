@@ -1,6 +1,6 @@
 // Configuration from Prompt
-const IK_ENDPOINT = 'https://upload.imagekit.io/api/v1/files/upload';
-const PUBLIC_KEY = 'public_VOIenkiN9tgU6n2Be4mr0lupcaA=';
+const IK_ENDPOINT = import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT;
+const PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY;
 
 export const uploadImage = async (file: File): Promise<string> => {
   const formData = new FormData();
@@ -24,7 +24,7 @@ export const uploadImage = async (file: File): Promise<string> => {
     }
 
     const data = await response.json();
-    
+
     if (data.url) {
       return data.url;
     } else {

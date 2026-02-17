@@ -31,6 +31,76 @@ const InventarisOrang = () => {
     }
   };
 
+  const handleAddItem = async (personName: string) => {
+    const { value: formValues } = await Swal.fire({
+      title: `<span class="text-xl font-bold">Tambah Item untuk ${personName}</span>`,
+      html: `
+        <div class="flex flex-col gap-3 text-left">
+          <div>
+            <label class="text-sm font-semibold text-slate-600">Nama Barang</label>
+            <input id="sw-nama-barang" class="swal2-input w-full m-0 mt-1" placeholder="Contoh: Obeng Set">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm font-semibold text-slate-600">Jumlah</label>
+              <input id="sw-jumlah" type="number" min="1" class="swal2-input w-full m-0 mt-1" value="1">
+            </div>
+            <div>
+              <label class="text-sm font-semibold text-slate-600">Kondisi</label>
+              <select id="sw-kondisi" class="swal2-input w-full m-0 mt-1">
+                <option value="Bagus">Bagus</option>
+                <option value="Rusak">Rusak</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      confirmButtonColor: '#013220',
+      preConfirm: () => {
+        const nama = (document.getElementById('sw-nama-barang') as HTMLInputElement).value;
+        const jumlah = (document.getElementById('sw-jumlah') as HTMLInputElement).value;
+        const kondisi = (document.getElementById('sw-kondisi') as HTMLSelectElement).value;
+
+        if (!nama || !jumlah) {
+          Swal.showValidationMessage('Mohon isi nama barang dan jumlah');
+          return false;
+        }
+
+        return { nama, jumlah: parseInt(jumlah), kondisi };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const { error } = await supabase
+          .from('inventaris_orang')
+          .insert([{
+            orang: personName,
+            nama: formValues.nama,
+            jumlah: formValues.jumlah,
+            kondisi: formValues.kondisi
+          }]);
+
+        if (error) throw error;
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Berhasil',
+          text: 'Item berhasil ditambahkan',
+          timer: 1500,
+          showConfirmButton: false
+        });
+
+        fetchDataOrang();
+      } catch (err: any) {
+        Swal.fire('Error', err.message, 'error');
+      }
+    }
+  };
+
   // Fungsi kirim rekap barang via WhatsApp
   const shareToWA = (person: string, items: any[]) => {
     const listBarang = items.map(i => `- ${i.nama} (${i.kondisi})`).join('%0A');
@@ -129,8 +199,8 @@ const InventarisOrang = () => {
                   <div key={item.id || idx} className="group/item flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md hover:border-sgd-200 transition-all duration-300">
                     <div className="flex items-center gap-3.5">
                       <div className={`p-3 rounded-xl shadow-sm transition-all duration-300 group-hover/item:scale-110 ${item.kondisi?.toLowerCase().includes('rusak')
-                          ? 'text-white bg-gradient-to-br from-red-500 to-red-600'
-                          : 'text-sgd-700 bg-gradient-to-br from-sgd-100 to-sgd-50'
+                        ? 'text-white bg-gradient-to-br from-red-500 to-red-600'
+                        : 'text-sgd-700 bg-gradient-to-br from-sgd-100 to-sgd-50'
                         }`}>
                         {item.kondisi?.toLowerCase().includes('rusak') ? <FaExclamationTriangle size={18} /> : <FaToolbox size={18} />}
                       </div>
@@ -140,8 +210,8 @@ const InventarisOrang = () => {
                       </div>
                     </div>
                     <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-                        : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                      : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                       }`}>
                       {item.kondisi?.toLowerCase().includes('rusak') ? '⚠️' : '✓'} {item.kondisi}
                     </span>
@@ -152,7 +222,7 @@ const InventarisOrang = () => {
               {/* Footer */}
               <div className="px-6 py-5 bg-gradient-to-r from-slate-50 to-white border-t border-slate-100 flex justify-center">
                 <button
-                  onClick={() => Swal.fire('Info', 'Fitur tambah item per orang akan segera hadir', 'info')}
+                  onClick={() => handleAddItem(nama)}
                   className="group/add text-xs font-black text-slate-500 hover:text-sgd-700 transition-all flex items-center gap-2.5"
                 >
                   <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-200 to-slate-100 group-hover/add:from-sgd-500 group-hover/add:to-sgd-600 text-slate-600 group-hover/add:text-white flex items-center justify-center transition-all duration-300 group-hover/add:scale-110 shadow-sm">

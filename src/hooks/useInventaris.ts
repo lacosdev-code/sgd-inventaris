@@ -46,11 +46,12 @@ export const useInventaris = () => {
           jumlah_tersedia: item.jumlah_tersedia,
           kondisi: item.kondisi,
           lokasi: item.lokasi,
-          kode_alat: item.kode_alat
+          kode_alat: item.kode_alat,
+          foto_url: item.foto_url
         }, { onConflict: 'kode_alat' });
 
       if (error) throw error;
-      
+
       Swal.fire('Berhasil!', 'Data inventaris telah diperbarui.', 'success');
       await fetchItems(); // Refresh data
     } catch (error: any) {
