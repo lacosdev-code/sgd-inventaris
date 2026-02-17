@@ -114,13 +114,14 @@ const Laporan = () => {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(18);
         doc.setTextColor(1, 50, 32); // SGD Green
-        doc.text('PT. SUNGGIARDI CORPORATION', 45, 20);
+        doc.text('PT. SUNGGIARDI CORPORATION', 45, 18);
 
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setTextColor(100);
-        doc.text('Jl. Raya Cilandak KKO No. 1, Jakarta Selatan', 45, 26);
-        doc.text('Email: admin@sgd-corp.com | Telp: (021) 789-1234', 45, 31);
+        doc.text('Puri Park View Apartment BC 3 / 16, Meruya Utara, Kembangan', 45, 24);
+        doc.text('Jakarta Barat, DKI Jakarta 11620, ID', 45, 29);
+        doc.text('Email: admin@sgd-corp.com | Telp: (021) 789-1234', 45, 34);
 
         // Line separator
         doc.setLineWidth(0.5);
