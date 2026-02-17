@@ -1,18 +1,22 @@
 import React, { useState, useRef } from 'react';
 import { useInventaris } from '../hooks/useInventaris';
 import { supabase } from '../services/supabase';
-import { uploadToolImage } from '../actions/uploadAction';
 import { QRCodeSVG } from 'qrcode.react';
 import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload, FiEdit, FiImage } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import QRScanner from '../components/Inventaris/QRScanner';
+import ItemModal from '../components/Inventaris/ItemModal';
 
 const InventarisUtama = () => {
   const { items, loading, deleteItem, upsertItem } = useInventaris();
   const [searchTerm, setSearchTerm] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [itemToEdit, setItemToEdit] = useState<any>(null);
 
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -88,217 +92,42 @@ const InventarisUtama = () => {
     });
   };
 
-  const handleAddOrEdit = async (itemToEdit?: any) => {
-    const isEdit = !!itemToEdit;
-    const title = isEdit ? '✏️ Edit Item' : '➕ Tambah Item Baru';
-    const confirmText = isEdit ? '💾 Simpan Perubahan' : '💾 Simpan Item';
+  const openAddModal = () => {
+    setItemToEdit(null);
+    setIsModalOpen(true);
+  };
 
-    const previewScript = `
-      window.handleFileSelect = function(input) {
-        const container = document.getElementById('preview-container');
-        container.innerHTML = '';
-        const files = Array.from(input.files);
-        
-        if (files.length > 0) {
-           document.getElementById('file-label').innerText = files.length + " Foto Dipilih";
-           files.forEach(file => {
-              const reader = new FileReader();
-              reader.onload = function(e) {
-                 const img = document.createElement('img');
-                 img.src = e.target.result;
-                 img.className = 'w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm flex-shrink-0';
-                 container.appendChild(img);
-              }
-              reader.readAsDataURL(file);
-           });
-           container.classList.remove('hidden');
-        } else {
-           container.classList.add('hidden');
-        }
+  const openEditModal = async (item: any) => {
+    // Need to fetch full item details including images to be sure
+    // Or just pass the item if we trust the list view has enough data?
+    // List view usually doesn't join tool_images. 
+    // Let's safe fetch or just pass 'item' and rely on ItemModal to fetch if needed?
+    // For speed, let's fetch the images here or inside the modal. 
+    // Actually, ItemModal logic assumed item passed has tool_images array. 
+    // The current `useInventaris` might NOT be fetching `tool_images`.
+    // Let's do a quick fetch single here to be safe.
+
+    try {
+      const { data, error } = await supabase
+        .from('inventaris_utama')
+        .select('*, tool_images(image_url)')
+        .eq('id', item.id)
+        .single();
+
+      if (data) {
+        setItemToEdit(data);
+        setIsModalOpen(true);
       }
-    `;
-
-    const { value: formValues } = await Swal.fire({
-      title: `<span class="text-2xl font-black text-slate-900">${title}</span>`,
-      html: `
-        <script>${previewScript}</script>
-        <div class="text-left space-y-4 p-2">
-          ${isEdit ? `<input type="hidden" id="sw-id" value="${itemToEdit.id}">` : ''}
-          
-          <div class="flex gap-4">
-             <div class="flex-1">
-                <label class="block text-sm font-bold text-slate-700 mb-2">Nama Barang <span class="text-red-500">*</span></label>
-                <input id="sw-nama" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Contoh: Mesin Bor" value="${itemToEdit?.nama || ''}" />
-             </div>
-             <div class="w-1/3">
-                <label class="block text-sm font-bold text-slate-700 mb-2">Kode Alat <span class="text-red-500">*</span></label>
-                <input id="sw-kode" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all font-mono" placeholder="KODE-001" value="${itemToEdit?.kode_alat || ''}" ${isEdit ? 'readonly class="bg-slate-100 text-slate-500 cursor-not-allowed"' : ''} />
-             </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-bold text-slate-700 mb-2">Jumlah Total <span class="text-red-500">*</span></label>
-              <input id="sw-jumlah" type="number" min="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="0" value="${itemToEdit?.jumlah || ''}" />
-            </div>
-            <div>
-              <label class="block text-sm font-bold text-slate-700 mb-2">Stok Tersedia</label>
-              <input id="sw-tersedia" type="number" min="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="0" value="${itemToEdit?.jumlah_tersedia || ''}" />
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-2">Kondisi</label>
-              <select id="sw-kondisi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all">
-                <option value="bagus" ${itemToEdit?.kondisi === 'bagus' ? 'selected' : ''}>✓ Bagus</option>
-                <option value="rusak" ${itemToEdit?.kondisi === 'rusak' ? 'selected' : ''}>⚠️ Rusak</option>
-              </select>
-            </div>
-            <div>
-               <label class="block text-sm font-bold text-slate-700 mb-2">Lokasi</label>
-               <input id="sw-lokasi" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-sgd-500 focus:outline-none transition-all" placeholder="Gudang A" value="${itemToEdit?.lokasi || ''}" />
-            </div>
-          </div>
-
-          <div>
-             <label class="block text-sm font-bold text-slate-700 mb-2">Foto Barang (Bisa banyak)</label>
-             <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors relative group">
-                <FiImage class="mx-auto text-2xl mb-2" />
-                <span class="text-xs font-semibold" id="file-label">${itemToEdit?.foto_url ? 'Ganti Foto Utama + Galeri' : 'Upload Foto (Max 5)'}</span>
-                <input type="file" id="sw-foto" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" multiple onchange="window.handleFileSelect(this)">
-             </div>
-             
-             <div id="preview-container" class="flex gap-2 mt-3 overflow-x-auto p-1 ${itemToEdit?.foto_url ? '' : 'hidden'}">
-                 ${itemToEdit?.foto_url ? `<img src="${itemToEdit.foto_url}" class="w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm flex-shrink-0" title="Foto Utama Saat Ini">` : ''}
-             </div>
-          </div>
-
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: confirmText,
-      cancelButtonText: 'Batal',
-      confirmButtonColor: '#C5A02D',
-      cancelButtonColor: '#64748b',
-      width: '600px',
-      preConfirm: () => {
-        const nama = (document.getElementById('sw-nama') as HTMLInputElement).value;
-        const kode = (document.getElementById('sw-kode') as HTMLInputElement).value;
-        const jumlah = parseInt((document.getElementById('sw-jumlah') as HTMLInputElement).value);
-        const tersedia = parseInt((document.getElementById('sw-tersedia') as HTMLInputElement).value);
-        const kondisi = (document.getElementById('sw-kondisi') as HTMLSelectElement).value;
-        const lokasi = (document.getElementById('sw-lokasi') as HTMLInputElement).value || '-';
-        const fileInput = (document.getElementById('sw-foto') as HTMLInputElement);
-        const files = fileInput.files;
-
-        if (!nama || !kode || isNaN(jumlah)) {
-          Swal.showValidationMessage('Nama, Kode, dan Jumlah wajib diisi!');
-          return false;
-        }
-
-        return {
-          nama,
-          kode_alat: kode,
-          jumlah,
-          jumlah_tersedia: isNaN(tersedia) ? jumlah : tersedia,
-          kondisi,
-          lokasi,
-          files: files && files.length > 0 ? Array.from(files) : []
-        };
-      }
-    });
-
-    if (formValues) {
-      try {
-        Swal.fire({
-          title: 'Memproses Data...',
-          html: 'Menyimpan info alat dan mengupload foto...',
-          allowOutsideClick: false,
-          didOpen: () => Swal.showLoading()
-        });
-
-        let mainPhotoUrl = itemToEdit?.foto_url || null;
-        let uploadedUrls: string[] = [];
-
-        if (formValues.files.length > 0) {
-          const formData = new FormData();
-          formValues.files.forEach((file: File) => {
-            formData.append('files', file);
-          });
-
-          const uploadRes = await uploadToolImage(formData);
-
-          if (!uploadRes.success || !uploadRes.urls) {
-            throw new Error(uploadRes.error || "Gagal upload foto");
-          }
-          uploadedUrls = uploadRes.urls;
-
-          if (!mainPhotoUrl && uploadedUrls.length > 0) {
-            mainPhotoUrl = uploadedUrls[0];
-          }
-          if (isEdit && formValues.files.length > 0) {
-            mainPhotoUrl = uploadedUrls[0];
-          }
-        }
-
-        const payload = {
-          nama: formValues.nama,
-          kode_alat: formValues.kode_alat,
-          jumlah: formValues.jumlah,
-          jumlah_tersedia: formValues.jumlah_tersedia,
-          kondisi: formValues.kondisi,
-          lokasi: formValues.lokasi,
-          foto_url: mainPhotoUrl
-        };
-
-        const { data: toolData, error: toolError } = await supabase
-          .from('inventaris_utama')
-          .upsert(isEdit ? { ...payload, id: itemToEdit.id } : payload)
-          .select()
-          .single();
-
-        if (toolError) throw toolError;
-        if (!toolData) throw new Error("Gagal menyimpan data alat.");
-
-        const toolId = toolData.id;
-
-        if (uploadedUrls.length > 0) {
-          const imageRecords = uploadedUrls.map(url => ({
-            tool_id: toolId,
-            image_url: url
-          }));
-
-          const { error: imgError } = await supabase
-            .from('tool_images')
-            .insert(imageRecords);
-
-          if (imgError) {
-            console.error("Error linking images:", imgError);
-            Swal.fire('Info', 'Alat disimpan, tapi gagal link foto ke galeri.', 'warning');
-            return;
-          }
-        }
-
-        await Swal.fire({
-          icon: 'success',
-          title: 'Berhasil!',
-          text: 'Data alat dan foto berhasil disimpan.',
-          timer: 1500,
-          showConfirmButton: false
-        });
-
-        window.location.reload();
-
-      } catch (error: any) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Gagal Menyimpan',
-          text: error.message,
-          confirmButtonColor: '#ef4444'
-        });
-      }
+    } catch (e) {
+      console.error("Error fetching detail for edit", e);
+      // Fallback to basic item if fetch fails?
+      setItemToEdit(item);
+      setIsModalOpen(true);
     }
+  };
+
+  const handleSuccess = () => {
+    window.location.reload(); // Simple refresh to show new data
   };
 
   const filtered = items.filter(item =>
@@ -310,6 +139,14 @@ const InventarisUtama = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {showScanner && <QRScanner onResult={handleScanResult} onClose={() => setShowScanner(false)} />}
+
+      {/* New React Modal */}
+      <ItemModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleSuccess}
+        itemToEdit={itemToEdit}
+      />
 
       <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 rounded-3xl shadow-modern-lg border border-gray-100/50">
         <div className="absolute top-0 right-0 w-64 h-64 bg-sgd-100 rounded-full blur-3xl opacity-30 -mr-32 -mt-32"></div>
@@ -370,7 +207,7 @@ const InventarisUtama = () => {
           </button>
 
           <button
-            onClick={() => handleAddOrEdit()}
+            onClick={openAddModal}
             className="relative overflow-hidden bg-gold-gradient text-white px-6 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
@@ -418,7 +255,7 @@ const InventarisUtama = () => {
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${item.jumlah_tersedia < 5 ? 'bg-gradient-to-r from-orange-500 to-orange-400' : 'bg-gradient-to-r from-green-500 to-green-400'}`}
+                            className={`h-full rounded-full transition-all duration-500 ${item.jumlah_tersedia < 5 ? 'bg-gradient-to-r from-orange-500 to-orange-400' : 'bg-gradient-to-r from-green-500 to-green-600'}`}
                             style={{ width: `${(item.jumlah_tersedia / item.jumlah) * 100}%` }}
                           ></div>
                         </div>
@@ -462,7 +299,7 @@ const InventarisUtama = () => {
                   <td className="p-5 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleAddOrEdit(item)}
+                        onClick={() => openEditModal(item)}
                         className="group/edit p-3 text-slate-400 hover:text-white hover:bg-sgd-500 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
                         title="Edit Item"
                       >
