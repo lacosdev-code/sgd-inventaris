@@ -222,12 +222,21 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Statistik Ringkas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        {/* SECTION 1: Master Aset Perusahaan */}
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+            <FaBox className="text-[#013220]" />
+            Master Aset Perusahaan
+          </h2>
+          <p className="text-sm text-gray-500">Semua inventaris yang dimiliki perusahaan</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <StatCard
             icon={<FaBox />}
             title="Total Aset"
             value={stats.totalBarang}
+            subtitle="Semua aset perusahaan"
             colorClass="bg-[#013220]/10 text-[#013220]"
             onClick={() => navigate('/inventaris')}
           />
@@ -235,6 +244,7 @@ const Dashboard = () => {
             icon={<FaCheckCircle />}
             title="Siap Pakai"
             value={stats.barangBagus}
+            subtitle="Kondisi bagus"
             colorClass="bg-green-100 text-green-600"
             onClick={() => navigate('/inventaris?search=bagus')}
           />
@@ -242,13 +252,27 @@ const Dashboard = () => {
             icon={<FaExclamationTriangle />}
             title="Kondisi Rusak"
             value={stats.barangRusak}
+            subtitle="Perlu perbaikan"
             colorClass="bg-red-100 text-red-600"
             onClick={() => navigate('/inventaris?search=rusak')}
           />
+        </div>
+
+        {/* SECTION 2: Tracking Personel & Peminjaman */}
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+            <FaUsers className="text-purple-600" />
+            Tracking Personel & Peminjaman
+          </h2>
+          <p className="text-sm text-gray-500">Aset yang dipinjam atau ditugaskan ke personel</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <StatCard
             icon={<FaExchangeAlt />}
             title="Sedang Dipinjam"
             value={stats.totalPinjam}
+            subtitle="Pinjaman aktif"
             colorClass="bg-[#D4AF37]/20 text-[#D4AF37]"
             onClick={() => navigate('/peminjaman')}
           />
@@ -256,6 +280,7 @@ const Dashboard = () => {
             icon={<FaUsers />}
             title="Total Personel"
             value={stats.totalPersonnel}
+            subtitle="Dengan aset tetap"
             colorClass="bg-purple-100 text-purple-600"
             onClick={() => navigate('/inventaris-orang')}
           />
@@ -484,7 +509,7 @@ const Dashboard = () => {
 };
 
 // Sub-komponen untuk Card Statistik
-const StatCard = ({ icon, title, value, colorClass, onClick }: any) => {
+const StatCard = ({ icon, title, value, subtitle, colorClass, onClick }: any) => {
   return (
     <div
       onClick={onClick}
@@ -497,6 +522,9 @@ const StatCard = ({ icon, title, value, colorClass, onClick }: any) => {
       <div className="relative z-10">
         <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider mb-1">{title}</p>
         <h3 className="text-3xl font-black text-slate-900">{value}</h3>
+        {subtitle && (
+          <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+        )}
       </div>
     </div>
   );

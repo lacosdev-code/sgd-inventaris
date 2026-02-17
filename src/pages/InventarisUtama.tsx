@@ -166,9 +166,9 @@ const InventarisUtama = () => {
             <div className="p-2.5 bg-sgd-50 rounded-xl">
               <FiFileText className="text-sgd-600 text-xl" />
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Inventaris Utama</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Master Aset</h1>
           </div>
-          <p className="text-slate-500 font-medium ml-14">Kelola semua aset dan stok barang di sini.</p>
+          <p className="text-gray-500 mt-1">Kelola semua inventaris perusahaan</p>
         </div>
       </div>
 

@@ -36,8 +36,8 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 
   const navLinks = [
     { path: '/', name: 'Dashboard', icon: <FiGrid /> },
-    { path: '/utama', name: 'Inventaris Utama', icon: <FiBox /> },
-    { path: '/orang', name: 'Inventaris Orang', icon: <FiUsers /> },
+    { path: '/utama', name: 'Master Aset', icon: <FiBox /> },
+    { path: '/orang', name: 'Aset Personel', icon: <FiUsers /> },
     { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat /> },
     { path: '/laporan', name: 'Laporan', icon: <FiPieChart /> },
     { path: '/log', name: 'Log Aktivitas', icon: <FiClock /> },

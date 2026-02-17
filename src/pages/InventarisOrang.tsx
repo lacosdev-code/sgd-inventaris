@@ -221,7 +221,7 @@ const InventarisOrang = () => {
       item.nama,
       item.type === 'permanent' ? 'Tetap' : 'Pinjaman',
       item.kondisi,
-      item.type === 'loan' && item.tgl_kembali 
+      item.type === 'loan' && item.tgl_kembali
         ? format(new Date(item.tgl_kembali), 'dd/MM/yyyy')
         : '-'
     ]);
@@ -330,8 +330,8 @@ const InventarisOrang = () => {
               <FaUser className="text-sgd-600 text-xl" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Inventaris Per Orang</h1>
-              <p className="text-slate-500 font-medium">Daftar aset yang dipegang oleh personel lapangan</p>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Aset Personel</h1>
+              <p className="text-gray-500 mt-1">Aset yang ditugaskan ke personel lapangan</p>
             </div>
           </div>
           <div className="relative w-full md:w-80 group">
@@ -416,8 +416,8 @@ const InventarisOrang = () => {
                         <p className="text-sm font-black text-slate-900">{item.nama}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${item.type === 'permanent'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-orange-100 text-orange-700'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-orange-100 text-orange-700'
                             }`}>
                             {item.type === 'permanent' ? '📦 Tetap' : '🔄 Pinjaman'}
                           </span>
