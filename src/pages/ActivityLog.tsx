@@ -12,6 +12,25 @@ const ActivityLog = () => {
 
   useEffect(() => {
     fetchLogs();
+
+    const channel = supabase
+      .channel('activity-logs-full')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs'
+        },
+        (payload) => {
+          setLogs(prev => [payload.new, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchLogs = async () => {
@@ -119,16 +138,67 @@ const ActivityLog = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => Swal.fire({
-                          title: 'Detail Perubahan',
-                          html: `<div class="text-left bg-slate-100 p-4 rounded-lg text-xs font-mono overflow-auto max-h-60">
-                            ${JSON.stringify(log.details, null, 2)}
-                          </div>`,
-                          confirmButtonColor: '#013220',
-                          confirmButtonText: 'Tutup'
-                        })}
+                        onClick={() => {
+                          const isConditionLog = log.action === 'CONDITION_LOG';
+                          const details = log.details || {};
+
+                          if (isConditionLog) {
+                            Swal.fire({
+                              title: '<span class="text-2xl font-black text-slate-900">Detail Handover</span>',
+                              html: `
+                                <div class="text-left space-y-4 p-2">
+                                  ${details.photo_url ? `
+                                    <div class="mb-4 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm">
+                                      <img src="${details.photo_url}" class="w-full h-auto object-cover max-h-64" alt="Bukti Foto" 
+                                           onerror="this.src='https://placehold.co/600x400?text=Foto+Tidak+Tersedia'"/>
+                                    </div>
+                                  ` : ''}
+                                  <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                      <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Teknisi</p>
+                                      <p class="text-sm font-bold text-slate-800">${details.teknisi || '-'}</p>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                      <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Status</p>
+                                      <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${details.type === 'Pinjam' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}">
+                                        ${details.type || '-'}
+                                      </span>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2">
+                                      <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Nama Alat</p>
+                                      <p class="text-sm font-bold text-slate-800">${details.item_name || '-'}</p>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2">
+                                      <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Kondisi Saat Ini</p>
+                                      <p class="text-sm font-semibold text-slate-700">${details.condition || '-'}</p>
+                                    </div>
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2">
+                                      <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Catatan</p>
+                                      <p class="text-sm text-slate-600 italic">${details.notes || 'Tidak ada catatan'}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              `,
+                              confirmButtonColor: '#C5A02D',
+                              confirmButtonText: 'Tutup',
+                              width: '500px',
+                              customClass: {
+                                popup: 'rounded-[1.5rem]',
+                              }
+                            });
+                          } else {
+                            Swal.fire({
+                              title: 'Detail Perubahan',
+                              html: `<div class="text-left bg-slate-100 p-4 rounded-lg text-xs font-mono overflow-auto max-h-60">
+                                ${JSON.stringify(log.details, null, 2)}
+                              </div>`,
+                              confirmButtonColor: '#013220',
+                              confirmButtonText: 'Tutup'
+                            });
+                          }
+                        }}
                         className="text-[#013220] hover:text-[#002618] transition"
-                        title="Lihat Detail JSON"
+                        title="Lihat Detail"
                       >
                         <FaInfoCircle size={20} />
                       </button>

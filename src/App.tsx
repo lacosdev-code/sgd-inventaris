@@ -16,33 +16,15 @@ import ActivityLog from './pages/ActivityLog';
 import DetailAlat from './pages/DetailAlat';
 import Laporan from './pages/Laporan';
 import KondisiAlat from './pages/KondisiAlat';
+import TechnicianManagement from './pages/TechnicianManagement';
 
 // --- SIDEBAR COMPONENT ---
-const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) => {
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      Swal.fire('Gagal Keluar', error.message, 'error');
-    } else {
-      Swal.fire({
-        icon: 'success',
-        title: 'Berhasil Keluar',
-        text: 'Sesi Anda telah berakhir.',
-        timer: 1500,
-        showConfirmButton: false
-      });
-    }
-  };
-
-  const navLinks = [
-    { path: '/', name: 'Dashboard', icon: <FiGrid /> },
-    { path: '/utama', name: 'Master Aset', icon: <FiBox /> },
-    { path: '/orang', name: 'Aset Personel', icon: <FiUsers /> },
-    { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat /> },
-    { path: '/laporan', name: 'Laporan', icon: <FiPieChart /> },
-    { path: '/log', name: 'Log Aktivitas', icon: <FiClock /> },
-  ];
+const Sidebar = ({ isOpen, setIsOpen, navLinks, onLogout }: {
+  isOpen: boolean,
+  setIsOpen: (val: boolean) => void,
+  navLinks: any[],
+  onLogout: () => void
+}) => {
 
   return (
     <>
@@ -106,7 +88,7 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
           <div className="mt-auto pt-6 border-t border-slate-800">
             {/* Logout Button */}
             <button
-              onClick={handleLogout}
+              onClick={onLogout}
               className="group w-full flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-red-900/20 hover:text-red-400 transition-all duration-300"
             >
               <FiLogOut className="text-xl transition-transform group-hover:-translate-x-1" />
@@ -122,10 +104,12 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 // --- MAIN CONTENT WRAPPER ---
 const AppContent = () => {
   const [session, setSession] = useState<any>(null);
+  const [techUser, setTechUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    // 1. Check Supabase Admin Session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -133,13 +117,30 @@ const AppContent = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setLoading(false);
     });
 
-    seedDatabase();
+    // 2. Check Technician Local Session
+    const savedTech = localStorage.getItem('tech_session');
+    if (savedTech) {
+      setTechUser(JSON.parse(savedTech));
+    }
 
+    seedDatabase();
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    if (session) {
+      await supabase.auth.signOut();
+    } else {
+      localStorage.removeItem('tech_session');
+      setTechUser(null);
+      window.location.reload();
+    }
+  };
+
+  const isAdmin = !!session;
+  const isTech = !!techUser;
 
   if (loading) {
     return (
@@ -150,7 +151,7 @@ const AppContent = () => {
     );
   }
 
-  if (!session) {
+  if (!isAdmin && !isTech) {
     return (
       <Routes>
         <Route path="*" element={<Login />} />
@@ -158,9 +159,28 @@ const AppContent = () => {
     );
   }
 
+  const allNavLinks = [
+    { path: '/', name: 'Dashboard', icon: <FiGrid />, roles: ['admin', 'tech'] },
+    { path: '/peminjaman', name: 'Peminjaman', icon: <FiRepeat />, roles: ['admin', 'tech'] },
+    { path: '/utama', name: 'Master Aset', icon: <FiBox />, roles: ['admin'] },
+    { path: '/orang', name: 'Aset Personel', icon: <FiUsers />, roles: ['admin'] },
+    { path: '/laporan', name: 'Laporan', icon: <FiPieChart />, roles: ['admin'] },
+    { path: '/teknisi', name: 'Manajemen Teknisi', icon: <FiUsers />, roles: ['admin'] },
+    { path: '/kondisi', name: 'Kondisi Alat', icon: <FiTool />, roles: ['admin'] },
+    { path: '/log', name: 'Log Aktivitas', icon: <FiClock />, roles: ['admin'] },
+  ];
+
+  const currentRole = isAdmin ? 'admin' : 'tech';
+  const navLinks = allNavLinks.filter(link => link.roles.includes(currentRole));
+
   return (
     <div className="flex h-screen bg-gray-50 text-[#1A1A1A] font-sans overflow-x-hidden">
-      <Sidebar isOpen={isSidebarOpen} setIsOpen={setSidebarOpen} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setSidebarOpen}
+        navLinks={navLinks}
+        onLogout={handleLogout}
+      />
 
       <div className="flex-1 flex flex-col h-full relative overflow-x-hidden">
         {/* Mobile Header */}
@@ -206,6 +226,7 @@ const AppContent = () => {
             <Route path="/laporan" element={<Laporan />} />
             <Route path="/log" element={<ActivityLog />} />
             <Route path="/kondisi" element={<KondisiAlat />} />
+            <Route path="/teknisi" element={<TechnicianManagement />} />
             <Route path="/detail/:id" element={<DetailAlat />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import { supabase } from '../services/supabase';
 import {
   Chart as ChartJS,
@@ -29,9 +30,30 @@ const Dashboard = () => {
     personnelItemsData: {} as any
   });
   const [loading, setLoading] = useState(true);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Real-time subscription for activity_logs
+    const channel = supabase
+      .channel('dashboard-recent-activity')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs'
+        },
+        (payload) => {
+          setRecentLogs(prev => [payload.new, ...prev.slice(0, 4)]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchDashboardData = async () => {
@@ -114,6 +136,16 @@ const Dashboard = () => {
           personnelItemsData: sortedPersonnel
         });
       }
+
+      // 4. Ambil data aktivitas terbaru
+      const { data: logs } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (logs) setRecentLogs(logs);
+
     } catch (error: any) {
       console.error('Error fetching dashboard stats:', error.message);
     } finally {
@@ -499,6 +531,65 @@ const Dashboard = () => {
                 />
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Real-time Activity Feed Section */}
+        <div className="mt-8 bg-white p-6 md:p-8 rounded-3xl shadow-modern border border-gray-100/50">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                Aktivitas Terbaru (Real-time)
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">Monitoring langsung pergerakan alat di lapangan</p>
+            </div>
+            <button
+              onClick={() => navigate('/log')}
+              className="text-sm font-semibold text-[#C5A02D] hover:text-[#AA8522] transition-colors"
+            >
+              Lihat Semua Log
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {recentLogs.length === 0 ? (
+              <div className="py-10 text-center text-gray-400 italic">
+                Belum ada aktivitas terekam...
+              </div>
+            ) : (
+              recentLogs.map((log) => (
+                <div key={log.id} className="flex items-start gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 group">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm ${log.details?.type === 'Pinjam' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
+                    <FaExchangeAlt />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-1">
+                      <p className="font-bold text-slate-800 truncate">
+                        {log.details?.item_name || 'Alat'}
+                      </p>
+                      <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded">
+                        {log.created_at ? format(new Date(log.created_at), 'HH:mm:ss') : '-'} WIB
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${log.details?.type === 'Pinjam' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                        }`}>
+                        {log.details?.type || 'Log'}
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Oleh <span className="font-semibold">{log.details?.teknisi || 'System'}</span>
+                      </p>
+                      <span className="text-gray-300">•</span>
+                      <p className="text-xs text-slate-400 italic truncate max-w-[200px]">
+                        "{log.details?.notes || log.details?.condition || 'No notes'}"
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

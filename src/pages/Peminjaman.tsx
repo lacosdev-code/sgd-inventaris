@@ -2,7 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { uploadImage } from '../services/imagekit';
 
-import { FaExchangeAlt, FaHistory, FaClock, FaCheckCircle, FaExclamationCircle, FaPlus, FaImage } from 'react-icons/fa';
+import {
+  FaExchangeAlt,
+  FaHistory,
+  FaClock,
+  FaCheckCircle,
+  FaExclamationCircle,
+  FaPlus,
+  FaImage,
+  FaSearch,
+  FaBoxOpen,
+  FaMapMarkerAlt,
+  FaBarcode,
+  FaChevronRight
+} from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -11,6 +24,7 @@ const Peminjaman = () => {
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogSearch, setCatalogSearch] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -26,11 +40,10 @@ const Peminjaman = () => {
         .eq('status', 'dipinjam')
         .order('tgl_pinjam', { ascending: false });
 
-      // Ambil barang yang stoknya > 0
+      // Ambil semua barang yang aktif (tidak terhapus) untuk Katalog & Dropdown Peminjaman
       const { data: items } = await supabase
         .from('inventaris_utama')
-        .select('id, nama, jumlah_tersedia, lokasi')
-        .gt('jumlah_tersedia', 0)
+        .select('id, nama, kode_alat, jumlah_tersedia, lokasi, kondisi')
         .eq('is_deleted', false)
         .order('nama', { ascending: true });
 
@@ -46,59 +59,60 @@ const Peminjaman = () => {
   };
 
   const handlePinjamModal = async () => {
-    // Generate options for the select element
-    const itemOptions = availableItems.map(item =>
+    const itemsToBorrow = availableItems.filter(i => i.jumlah_tersedia > 0);
+    const itemOptions = itemsToBorrow.map(item =>
       `<option value="${item.id}">${item.nama} ${item.lokasi ? `📍 ${item.lokasi}` : ''} (Sisa: ${item.jumlah_tersedia})</option>`
     ).join('');
 
-    if (availableItems.length === 0) {
+    if (itemsToBorrow.length === 0) {
       Swal.fire('Stok Kosong', 'Tidak ada barang yang tersedia untuk dipinjam saat ini.', 'warning');
       return;
     }
 
     await Swal.fire({
-      title: '<span class="text-[#013220] font-bold">Form Peminjaman Alat</span>',
+      title: '<span class="text-[#013220] font-bold uppercase tracking-tight">Form Peminjaman Alat</span>',
       html: `
-        <div class="flex flex-col gap-3 text-left">
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Pilih Barang</label>
-            <select id="sw-item" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+        <div class="flex flex-col gap-4 text-left p-2">
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Pilih Barang</label>
+            <select id="sw-item" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl focus:border-[#013220] outline-none font-bold text-slate-700">
               ${itemOptions}
             </select>
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Nama Peminjam</label>
-            <input id="sw-peminjam" class="swal2-input w-full m-0 mt-1" placeholder="Nama Lengkap">
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nama Peminjam</label>
+            <input id="sw-peminjam" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold" placeholder="Nama Lengkap">
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Nama Teknisi (Serah Terima)</label>
-            <input id="sw-teknisi" class="swal2-input w-full m-0 mt-1" placeholder="Nama Teknisi">
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nama Teknisi (Serah Terima)</label>
+            <input id="sw-teknisi" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold" placeholder="Nama Teknisi Lapangan">
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Tanggal Pinjam</label>
-            <input id="sw-tgl-pinjam" type="date" class="swal2-input w-full m-0 mt-1" value="${new Date().toISOString().split('T')[0]}">
+          <div class="grid grid-cols-2 gap-3">
+             <div class="space-y-1">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tgl Pinjam</label>
+                <input id="sw-tgl-pinjam" type="date" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold" value="${new Date().toISOString().split('T')[0]}">
+             </div>
+             <div class="space-y-1">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Rencana Kembali</label>
+                <input id="sw-kembali" type="date" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold">
+             </div>
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Rencana Kembali</label>
-            <input id="sw-kembali" type="date" class="swal2-input w-full m-0 mt-1">
-          </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Kondisi Awal</label>
-            <select id="sw-kondisi" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Kondisi Awal</label>
+            <select id="sw-kondisi" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold text-slate-700">
               <option value="Baik / Normal">🟢 Baik / Normal</option>
               <option value="Rusak Ringan">🟡 Rusak Ringan</option>
               <option value="Rusak Berat">🔴 Rusak Berat</option>
               <option value="Hilang">⚫ Hilang</option>
             </select>
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Foto Bukti Pinjam</label>
-            <input type="file" id="sw-foto" accept="image/*" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
-            <p class="text-xs text-gray-400 mt-1">*Opsional, untuk bukti kondisi saat dipinjam</p>
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto Bukti Pinjam</label>
+            <input type="file" id="sw-foto" accept="image/*" class="swal2-file w-full m-0 mt-1 border-2 border-slate-100 rounded-xl">
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Catatan</label>
-            <textarea id="sw-catatan" class="swal2-textarea w-full m-0 mt-1" placeholder="Keperluan / Kondisi awal..."></textarea>
+          <div class="space-y-1">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Catatan</label>
+            <textarea id="sw-catatan" class="swal2-textarea w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-medium" placeholder="Keperluan pemakaian alat..."></textarea>
           </div>
         </div>
       `,
@@ -107,6 +121,11 @@ const Peminjaman = () => {
       confirmButtonText: 'Konfirmasi Pinjam',
       confirmButtonColor: '#013220',
       cancelButtonColor: '#94a3b8',
+      customClass: {
+        popup: 'rounded-[1.5rem]',
+        confirmButton: 'rounded-xl px-10 py-3 font-bold',
+        cancelButton: 'rounded-xl px-10 py-3 font-bold'
+      },
       preConfirm: () => {
         const barangId = (document.getElementById('sw-item') as HTMLSelectElement).value;
         const peminjam = (document.getElementById('sw-peminjam') as HTMLInputElement).value;
@@ -118,7 +137,7 @@ const Peminjaman = () => {
         const catatan = (document.getElementById('sw-catatan') as HTMLTextAreaElement).value;
 
         if (!barangId || !peminjam || !tglPinjam || !tglKembali) {
-          Swal.showValidationMessage('Mohon lengkapi semua data wajib!');
+          Swal.showValidationMessage('Mohon lengkapi data wajib!');
           return false;
         }
 
@@ -139,26 +158,16 @@ const Peminjaman = () => {
         const selectedItem = availableItems.find(i => i.id == formValues.barang_id);
 
         try {
-          // Show loading
           Swal.fire({
             title: 'Memproses...',
-            html: 'Mengupload foto dan menyimpan data...',
-            allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
           });
 
-          // 1. Upload Photo (if exists)
           let photoUrl = '';
           if (formValues.foto) {
-            try {
-              photoUrl = await uploadImage(formValues.foto);
-            } catch (uploadErr) {
-              console.error('Upload failed:', uploadErr);
-              throw new Error("Gagal upload foto. Periksa koneksi internet.");
-            }
+            photoUrl = await uploadImage(formValues.foto);
           }
 
-          // 2. Insert Loan Record with new fields
           const { data: loanData, error: loanError } = await supabase.from('peminjaman').insert([{
             barang_id: parseInt(formValues.barang_id),
             peminjam: formValues.peminjam,
@@ -174,57 +183,32 @@ const Peminjaman = () => {
 
           if (loanError) throw loanError;
 
-          // 3. Reduce Stock
           const newStock = (selectedItem?.jumlah_tersedia || 0) - 1;
-          const { error: stockError } = await supabase
+          await supabase
             .from('inventaris_utama')
             .update({ jumlah_tersedia: newStock })
             .eq('id', parseInt(formValues.barang_id));
 
-          if (stockError) console.error("Gagal update stok:", stockError);
-
-          // 4. Create Activity Log
-          const logDetails = {
-            teknisi: formValues.teknisi,
-            type: 'Pinjam',
-            item_id: parseInt(formValues.barang_id),
-            item_name: selectedItem?.nama || 'Unknown Item',
-            condition: formValues.kondisi,
-            notes: formValues.catatan,
-            photo_url: photoUrl,
-            timestamp: new Date().toISOString()
-          };
-
-          const { error: logError } = await supabase
+          await supabase
             .from('activity_logs')
             .insert([{
               user_email: 'System Tracker',
               action: 'CONDITION_LOG',
               table_name: 'peminjaman',
               record_id: loanData?.[0]?.id || 0,
-              details: logDetails
+              details: {
+                teknisi: formValues.teknisi,
+                type: 'Pinjam',
+                item_id: parseInt(formValues.barang_id),
+                item_name: selectedItem?.nama || 'Unknown Item',
+                condition: formValues.kondisi,
+                notes: formValues.catatan,
+                photo_url: photoUrl,
+                timestamp: new Date().toISOString()
+              }
             }]);
 
-          if (logError) console.error("Log failed", logError);
-
-          // 5. Add photo to gallery
-          if (photoUrl) {
-            const { error: galleryError } = await supabase
-              .from('tool_images')
-              .insert({
-                tool_id: parseInt(formValues.barang_id),
-                image_url: photoUrl
-              });
-            if (galleryError) console.error("Gallery insert failed:", galleryError);
-          }
-
-          Swal.fire({
-            icon: 'success',
-            title: 'Berhasil!',
-            text: 'Peminjaman tercatat & stok dikurangi.',
-            confirmButtonColor: '#013220'
-          });
-
+          Swal.fire({ icon: 'success', title: 'Berhasil!', confirmButtonColor: '#013220' });
           fetchData();
 
         } catch (err: any) {
@@ -238,79 +222,60 @@ const Peminjaman = () => {
     await Swal.fire({
       title: '<span class="text-[#013220] font-bold">Form Pengembalian Alat</span>',
       html: `
-        <div class="flex flex-col gap-3 text-left">
-          <div class="bg-slate-50 p-3 rounded-lg mb-2">
-            <p class="text-sm"><b>Barang:</b> ${loan.barang_nama}</p>
-            <p class="text-sm"><b>Peminjam:</b> ${loan.peminjam}</p>
-            ${loan.foto_bukti_url ? `<p class="text-xs text-gray-500 mt-2">Foto Pinjam:</p><img src="${loan.foto_bukti_url}" class="w-24 h-24 object-cover rounded-lg border mt-1" />` : ''}
+        <div class="flex flex-col gap-3 text-left p-2">
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-inner mb-4">
+            <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Objek Pinjaman</p>
+            <p class="text-lg font-black text-slate-900">${loan.barang_nama}</p>
+            <p class="text-sm font-bold text-slate-500">Peminjam: ${loan.peminjam}</p>
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Nama Teknisi (Penerima)</label>
-            <input id="sw-teknisi-kembali" class="swal2-input w-full m-0 mt-1" placeholder="Nama Teknisi">
+          <div class="space-y-2">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nama Teknisi (Penerima)</label>
+            <input id="sw-teknisi-kembali" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold" placeholder="Nama Teknisi">
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Kondisi Saat Kembali</label>
-            <select id="sw-kondisi-kembali" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
+          <div class="space-y-2">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Kondisi Akhir</label>
+            <select id="sw-kondisi-kembali" class="swal2-input w-full m-0 mt-1 border-2 border-slate-100 rounded-xl font-bold">
               <option value="Baik / Normal">🟢 Baik / Normal</option>
               <option value="Rusak Ringan">🟡 Rusak Ringan</option>
               <option value="Rusak Berat">🔴 Rusak Berat</option>
               <option value="Hilang">⚫ Hilang</option>
             </select>
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Foto Bukti Kembali</label>
-            <input type="file" id="sw-foto-kembali" accept="image/*" class="swal2-input w-full m-0 mt-1 border-gray-300 focus:ring-[#013220] focus:border-[#013220]">
-            <p class="text-xs text-gray-400 mt-1">*Opsional, untuk bukti kondisi saat dikembalikan</p>
+          <div class="space-y-2">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Bukti Pengembalian</label>
+            <input type="file" id="sw-foto-kembali" accept="image/*" class="swal2-file w-full m-0 mt-1">
           </div>
-          <div>
-            <label class="text-sm font-semibold text-gray-600">Catatan Pengembalian</label>
-            <textarea id="sw-catatan-kembali" class="swal2-textarea w-full m-0 mt-1" placeholder="Kondisi saat dikembalikan..."></textarea>
+          <div class="space-y-2">
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Catatan Kembali</label>
+            <textarea id="sw-catatan-kembali" class="swal2-textarea w-full m-0 mt-1 border-2 border-slate-100 rounded-xl" placeholder="Catatan kondisi saat dikembalikan..."></textarea>
           </div>
         </div>
       `,
-      focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: 'Konfirmasi Pengembalian',
+      confirmButtonText: 'Selesaikan Pinjaman',
       confirmButtonColor: '#013220',
-      cancelButtonColor: '#94a3b8',
+      customClass: {
+        popup: 'rounded-[1.5rem]',
+        confirmButton: 'rounded-xl px-10 py-3 font-bold'
+      },
       preConfirm: () => {
         const teknisi = (document.getElementById('sw-teknisi-kembali') as HTMLInputElement)?.value || '';
         const kondisi = (document.getElementById('sw-kondisi-kembali') as HTMLSelectElement)?.value || 'Baik / Normal';
         const foto = (document.getElementById('sw-foto-kembali') as HTMLInputElement)?.files?.[0];
         const catatan = (document.getElementById('sw-catatan-kembali') as HTMLTextAreaElement)?.value || '';
-
-        return {
-          teknisi,
-          kondisi,
-          foto,
-          catatan
-        };
+        return { teknisi, kondisi, foto, catatan };
       }
     }).then(async (result) => {
-
       if (result.isConfirmed && result.value) {
         const formValues = result.value;
         try {
-          // Show loading
-          Swal.fire({
-            title: 'Memproses...',
-            html: 'Mengupload foto dan menyimpan data...',
-            allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
-          });
+          Swal.fire({ title: 'Memproses...', didOpen: () => Swal.showLoading() });
 
-          // 1. Upload Return Photo (if exists)
           let photoUrl = '';
           if (formValues.foto) {
-            try {
-              photoUrl = await uploadImage(formValues.foto);
-            } catch (uploadErr) {
-              console.error('Upload failed:', uploadErr);
-              throw new Error("Gagal upload foto. Periksa koneksi internet.");
-            }
+            photoUrl = await uploadImage(formValues.foto);
           }
 
-          // 2. Update Loan Status with return fields
           const { error: loanError } = await supabase
             .from('peminjaman')
             .update({
@@ -325,74 +290,29 @@ const Peminjaman = () => {
 
           if (loanError) throw loanError;
 
-          // 3. Restore Stock
-          const { data: currentItem } = await supabase
-            .from('inventaris_utama')
-            .select('jumlah_tersedia')
-            .eq('id', loan.barang_id)
-            .single();
-
+          const { data: currentItem } = await supabase.from('inventaris_utama').select('jumlah_tersedia').eq('id', loan.barang_id).single();
           if (currentItem) {
-            const { error: stockError } = await supabase
-              .from('inventaris_utama')
-              .update({ jumlah_tersedia: currentItem.jumlah_tersedia + 1 })
-              .eq('id', loan.barang_id);
-
-            if (stockError) console.error("Gagal kembalikan stok:", stockError);
+            await supabase.from('inventaris_utama').update({ jumlah_tersedia: currentItem.jumlah_tersedia + 1 }).eq('id', loan.barang_id);
           }
 
-          // 4. Create Activity Log for Return
-          const logDetails = {
-            teknisi: formValues.teknisi,
-            type: 'Kembali',
-            item_id: loan.barang_id,
-            item_name: loan.barang_nama,
-            condition: formValues.kondisi,
-            notes: formValues.catatan,
-            photo_url: photoUrl,
-            timestamp: new Date().toISOString()
-          };
+          await supabase.from('activity_logs').insert([{
+            user_email: 'System Tracker',
+            action: 'CONDITION_LOG',
+            table_name: 'peminjaman',
+            record_id: loan.id,
+            details: {
+              teknisi: formValues.teknisi,
+              type: 'Kembali',
+              item_id: loan.barang_id,
+              item_name: loan.barang_nama,
+              condition: formValues.kondisi,
+              notes: formValues.catatan,
+              photo_url: photoUrl,
+              timestamp: new Date().toISOString()
+            }
+          }]);
 
-          const { error: logError } = await supabase
-            .from('activity_logs')
-            .insert([{
-              user_email: 'System Tracker',
-              action: 'CONDITION_LOG',
-              table_name: 'peminjaman',
-              record_id: loan.id,
-              details: logDetails
-            }]);
-
-          if (logError) console.error("Log failed", logError);
-
-          // 5. Add return photo to gallery
-          if (photoUrl) {
-            const { error: galleryError } = await supabase
-              .from('tool_images')
-              .insert({
-                tool_id: loan.barang_id,
-                image_url: photoUrl
-              });
-            if (galleryError) console.error("Gallery insert failed:", galleryError);
-          }
-
-          // 6. Also add borrow photo to gallery if it exists
-          if (loan.foto_bukti_url) {
-            const { error: galleryError } = await supabase
-              .from('tool_images')
-              .insert({
-                tool_id: loan.barang_id,
-                image_url: loan.foto_bukti_url
-              });
-            if (galleryError) console.error("Gallery insert failed:", galleryError);
-          }
-
-          Swal.fire({
-            icon: 'success',
-            title: 'Dikembalikan!',
-            text: 'Stok barang otomatis bertambah.',
-            confirmButtonColor: '#013220'
-          });
+          Swal.fire({ icon: 'success', title: 'Berhasil Dikembalikan!' });
           fetchData();
         } catch (err: any) {
           Swal.fire('Error', err.message, 'error');
@@ -401,129 +321,196 @@ const Peminjaman = () => {
     });
   };
 
+  const filteredCatalog = availableItems.filter(item =>
+    item.nama.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+    (item.kode_alat && item.kode_alat.toLowerCase().includes(catalogSearch.toLowerCase()))
+  );
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-10 animate-fade-in pb-20">
 
       {/* Modern Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 rounded-3xl shadow-modern-lg border border-gray-100/50">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-sgd-100 rounded-full blur-3xl opacity-30 -mr-32 -mt-32"></div>
-        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-sgd-50 rounded-xl">
-              <FaExchangeAlt className="text-sgd-600 text-xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 md:p-12 rounded-[2.5rem] shadow-modern-lg border border-gray-100/50">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gold-gradient rounded-full blur-[100px] opacity-10 -mr-40 -mt-40"></div>
+        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-5">
+            <div className="p-4 bg-gold-gradient rounded-2xl shadow-xl ring-4 ring-sgd-500/10">
+              <FaExchangeAlt className="text-white text-2xl" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Transaksi Peminjaman</h1>
-              <p className="text-slate-500 font-medium">Pantau alat yang sedang digunakan di lapangan</p>
+              <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-none mb-2">Portal Peminjaman</h1>
+              <p className="text-slate-500 font-bold text-sm tracking-wide">PENGELOLAAN ALAT & ASET LAPANGAN</p>
             </div>
           </div>
           <button
             onClick={handlePinjamModal}
-            className="relative overflow-hidden bg-gold-gradient text-white px-6 py-3.5 rounded-2xl font-black flex items-center gap-2.5 transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group"
+            className="w-full md:w-auto overflow-hidden bg-slate-900 text-white px-10 py-5 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl hover:bg-slate-800 transition-all active:scale-95 group"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-            <FaPlus className="relative z-10 group-hover:rotate-90 transition-transform duration-300" />
-            <span className="relative z-10">Buat Pinjaman Baru</span>
+            <FaPlus className="text-sgd-400 group-hover:rotate-90 transition-transform duration-300" />
+            Input Pinjaman Baru
           </button>
         </div>
       </div>
 
-      {/* Stats Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="group bg-gradient-to-br from-white to-slate-50/30 p-6 rounded-3xl shadow-modern border border-gray-100/50 hover:shadow-modern-lg transition-all duration-300 hover:-translate-y-1">
+      {/* Active Loans Table */}
+      <div className="bg-white rounded-[2.5rem] shadow-modern-lg border border-slate-100 overflow-hidden">
+        <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/30">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-gradient-to-br from-sgd-100 to-sgd-50 text-sgd-700 rounded-2xl flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-              <FaClock />
+            <div className="p-3 bg-sgd-100 rounded-xl text-sgd-700 shadow-inner">
+              <FaHistory />
             </div>
             <div>
-              <p className="text-sm text-slate-500 font-semibold">Sedang Dipinjam</p>
-              <h3 className="text-3xl font-black text-slate-900">{activeLoans.length} <span className="text-lg font-bold text-slate-500">Alat</span></h3>
+              <h3 className="font-black text-slate-900 text-xl tracking-tight">Pinjaman Aktif Anda</h3>
+              <p className="text-xs text-slate-400 font-bold flex items-center gap-1 uppercase tracking-widest mt-1">
+                <FaClock className="text-sgd-500" /> Sedang Dipinjam: {activeLoans.length} Alat
+              </p>
             </div>
           </div>
+        </div>
+
+        <div className="overflow-x-auto px-2 pb-2">
+          {loading ? (
+            <div className="py-20 text-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-sgd-500 border-t-transparent mx-auto mb-4"></div><p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">SINKRONISASI DATA...</p></div>
+          ) : activeLoans.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FaCheckCircle className="text-green-500 text-3xl" />
+              </div>
+              <p className="font-black text-slate-800 text-lg uppercase tracking-tight">Status Aman</p>
+              <p className="text-slate-400 font-medium text-sm">Anda tidak memiliki alat yang perlu dikembalikan.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
+                  <th className="px-6 py-5">Item Informasi</th>
+                  <th className="px-6 py-5">Tgl Pinjam</th>
+                  <th className="px-6 py-5 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {activeLoans.map((loan) => (
+                  <tr key={loan.id} className="group hover:bg-slate-50/50 transition-all duration-300">
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-4">
+                        {loan.foto_bukti_url ? (
+                          <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm shrink-0">
+                            <img src={loan.foto_bukti_url} alt="Tool" className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="underline w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300 shrink-0">
+                            <FaImage size={20} />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{loan.barang_nama}</p>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Peminjam: {loan.peminjam}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <p className="text-slate-700 font-black text-sm">{format(new Date(loan.tgl_pinjam), 'dd/MM/yy')}</p>
+                      <p className="text-[10px] items-center gap-1 font-bold text-red-500 mt-1 flex">
+                        <FaClock size={8} /> JML: {loan.tgl_kembali_rencana ? format(new Date(loan.tgl_kembali_rencana), 'dd/MM') : '-'}
+                      </p>
+                    </td>
+                    <td className="px-6 py-6 text-center">
+                      <button
+                        onClick={() => handleReturn(loan)}
+                        className="bg-sgd-100 text-sgd-700 px-6 py-3 rounded-xl text-xs font-black shadow-inner hover:bg-sgd-600 hover:text-white transition-all transform hover:-translate-y-1"
+                      >
+                        KEMBALIKAN
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Loan Table */}
-      <div className="bg-gradient-to-br from-white to-slate-50/30 rounded-3xl shadow-modern-lg border border-gray-100/50 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3 bg-white/50 backdrop-blur-sm">
-          <div className="p-2 bg-sgd-50 rounded-lg">
-            <FaHistory className="text-sgd-600" />
+      {/* Available Catalog (Master Aset for Techs) */}
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 md:px-0">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-sgd-900 rounded-2xl shadow-xl">
+              <FaBoxOpen className="text-sgd-400 text-xl" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">Katalog Alat Tersedia</h2>
+              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mt-1">Daftar Inventaris Utama</p>
+            </div>
           </div>
-          <h3 className="font-black text-slate-900 text-lg">Daftar Pinjaman Aktif</h3>
+
+          <div className="relative group flex-1 md:max-w-md">
+            <FaSearch className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-sgd-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Cari nama atau kode alat..."
+              className="w-full pl-16 pr-6 py-5 bg-white border-2 border-transparent rounded-[1.5rem] shadow-xl shadow-slate-200/50 outline-none focus:border-sgd-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+              value={catalogSearch}
+              onChange={(e) => setCatalogSearch(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gradient-to-r from-slate-900 to-slate-800 text-white text-xs uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-5 font-black">Barang / ID</th>
-                <th className="px-6 py-5 font-black">Peminjam</th>
-                <th className="px-6 py-5 font-black">Foto</th>
-                <th className="px-6 py-5 font-black">Tgl Pinjam</th>
-                <th className="px-6 py-5 font-black">Rencana Kembali</th>
-                <th className="px-6 py-5 text-center font-black">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr><td colSpan={6} className="py-20 text-center text-slate-400"><div className="flex justify-center items-center gap-3"><div className="animate-spin rounded-full h-12 w-12 border-4 border-sgd-500 border-t-transparent"></div><span className="font-semibold">Memuat data transaksi...</span></div></td></tr>
-              ) : activeLoans.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center text-slate-400">
-                    <div className="flex flex-col items-center">
-                      <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                        <FaCheckCircle size={32} className="text-green-500" />
-                      </div>
-                      <p className="font-semibold text-lg">Semua barang aman di gudang.</p>
+
+        {loading ? (
+          <div className="py-20 text-center text-slate-300 font-black tracking-[0.3em] text-xs">LOADING CATALOG...</div>
+        ) : filteredCatalog.length === 0 ? (
+          <div className="bg-white rounded-[2.5rem] p-16 text-center border-2 border-dashed border-slate-100">
+            <FaSearch size={40} className="text-slate-100 mx-auto mb-4" />
+            <p className="text-slate-400 font-black uppercase tracking-widest text-sm text-center">Data alat tidak ditemukan</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCatalog.map(item => (
+              <div key={item.id} className="group bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between overflow-hidden relative">
+                {/* Decor Background */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-sgd-50 opacity-0 group-hover:opacity-100 rounded-bl-[4rem] transition-all -z-0"></div>
+
+                <div className="relative z-10 flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className={`p-4 rounded-2xl ${item.jumlah_tersedia > 0 ? 'bg-sgd-50 text-sgd-600 shadow-inner' : 'bg-red-50 text-red-400 opacity-50'}`}>
+                      <FaBarcode size={24} />
                     </div>
-                  </td>
-                </tr>
-              ) : activeLoans.map((loan) => (
-                <tr key={loan.id} className="hover:bg-gradient-to-r hover:from-sgd-50/30 hover:to-transparent transition-all duration-300 group">
-                  <td className="px-6 py-5">
-                    <p className="font-black text-slate-900 text-base">{loan.barang_nama}</p>
-                    <p className="text-[10px] text-slate-500 font-mono font-semibold mt-0.5">ID: #{loan.id}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-sgd-100 to-sgd-50 text-sgd-700 rounded-full flex items-center justify-center text-sm font-black uppercase border-2 border-sgd-200 shadow-sm">
-                        {loan.peminjam ? loan.peminjam.charAt(0) : '?'}
-                      </div>
-                      <span className="text-sm font-bold text-slate-700">{loan.peminjam}</span>
+                    <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ${item.jumlah_tersedia > 0 ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>
+                      {item.jumlah_tersedia > 0 ? 'READY STOK' : 'STOK KOSONG'}
                     </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    {loan.foto_bukti_url ? (
-                      <a href={loan.foto_bukti_url} target="_blank" rel="noreferrer" className="block w-12 h-12 rounded-xl overflow-hidden border-2 border-slate-200 hover:border-sgd-400 hover:scale-150 transition-all origin-left shadow-sm hover:shadow-md">
-                        <img src={loan.foto_bukti_url} alt="Bukti" className="w-full h-full object-cover" />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic font-semibold">No Image</span>
+                  </div>
+
+                  <div className="mb-6 flex-1">
+                    <h4 className="text-xl font-black text-slate-900 group-hover:text-sgd-700 transition-colors uppercase tracking-tight line-clamp-2">{item.nama}</h4>
+                    <p className="text-[10px] font-black text-slate-400 mt-2 tracking-widest uppercase">KODE: {item.kode_alat || 'NO-CODE'}</p>
+                  </div>
+
+                  <div className="space-y-4 pt-6 border-t border-slate-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <FaMapMarkerAlt className="text-slate-300" />
+                        <span className="text-xs font-bold text-slate-500">{item.lokasi || 'Lokasi tidak diset'}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">STOK</p>
+                        <p className={`text-2xl font-black ${item.jumlah_tersedia > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{item.jumlah_tersedia}</p>
+                      </div>
+                    </div>
+
+                    {item.jumlah_tersedia > 0 && (
+                      <button
+                        onClick={handlePinjamModal}
+                        className="w-full flex items-center justify-between p-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-sgd-600 transition-all shadow-xl shadow-slate-200 group-hover:shadow-sgd-400/20"
+                      >
+                        <span className="text-xs uppercase tracking-widest">Pinjam Alat</span>
+                        <FaChevronRight size={10} className="text-sgd-400 group-hover:translate-x-1 transition-transform" />
+                      </button>
                     )}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-700 font-semibold">
-                    {loan.tgl_pinjam ? format(new Date(loan.tgl_pinjam), 'dd MMM yyyy', { locale: idLocale }) : '-'}
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-2">
-                      <FaExclamationCircle className="text-sgd-600" />
-                      <span className="text-sm text-slate-700 font-semibold">
-                        {loan.tgl_kembali_rencana ? format(new Date(loan.tgl_kembali_rencana), 'dd MMM yyyy', { locale: idLocale }) : '-'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <button
-                      onClick={() => handleReturn(loan)}
-                      className="bg-gold-gradient text-white px-5 py-2.5 rounded-xl text-xs font-black hover:shadow-lg hover:shadow-sgd-500/30 transition-all active:scale-95"
-                    >
-                      ✓ Selesaikan
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,19 +2,55 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# SGD Inventaris - Admin Dashboard 🏗️
 
-This contains everything you need to run your app locally.
+Welcome to the **Admin Dashboard** of the SGD Inventaris Management System. This repository is part of a **Decoupled Frontend Architecture** designed for high-security and specialized user experiences.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1pXYnrJgAa5ZsScQ_P0yRkl-Hd4CshhLP
+## 📐 System Architecture
 
-## Run Locally
+Our system operates on a "One Database, Two Frontends" philosophy to ensure clear separation of concerns and optimized workflows:
 
-**Prerequisites:**  Node.js
+### 1. Admin Dashboard (This Project)
+- **Primary Domain:** `inventaris.sgd-corp.com`
+- **Scope:** High-level management and administration.
+- **Core Functions:**
+  - Master Data CRUD (Inventory, Tools, Personnel).
+  - Stock & Asset Management.
+  - Comprehensive Audit Logs & Activity Monitoring.
+  - Reporting and Analytics.
+- **Privilege Level:** Admin Only.
 
+### 2. Technician Portal (External PWA)
+- **Primary Domain:** `peminjaman.sgd-corp.com`
+- **Scope:** Operational field activities.
+- **Core Functions:**
+  - QR Code scanning for instant tool identification.
+  - Real-time Borrowing & Returning (Handover).
+  - Physical Condition reporting with Photo Proof.
+  - Quick access for field technicians (PWA).
+- **Privilege Level:** Restricted (No Admin access).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 🗄️ Shared Infrastructure
+Both frontends communicate directly with a single **Supabase Shared Database**. This ensures:
+- **Consistent Truth:** Any action taken in the Technician Portal is reflected instantly in the Admin Dashboard.
+- **Atomic Operations:** Shared business logic (triggers/RPC) preserves data integrity across platforms.
+
+---
+
+## 🛠️ Development Setup
+
+**Prerequisites:** Node.js (v18+) & Supabase CLI (Optional)
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+2. **Environment Variables:**
+   Copy `.env.example` to `.env.local` and configure your Supabase & ImageKit credentials.
+3. **Run locally:**
+   ```bash
+   npm run dev
+   ```
+
+## 🚀 Deployment
+This project is optimized for deployment on **Vercel**. Ensure environment variables are correctly mirrored in the Vercel dashboard for production stability.
