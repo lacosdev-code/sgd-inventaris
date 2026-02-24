@@ -13,7 +13,8 @@ import {
   Title
 } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
-import { FaBox, FaExclamationTriangle, FaExchangeAlt, FaMapMarkerAlt, FaCheckCircle, FaSpinner, FaCalendarTimes, FaUsers } from 'react-icons/fa';
+import { FaBox, FaExclamationTriangle, FaExchangeAlt, FaMapMarkerAlt, FaCheckCircle, FaSpinner, FaCalendarTimes, FaUsers, FaCubes } from 'react-icons/fa';
+import { FiPackage } from 'react-icons/fi';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
@@ -31,6 +32,8 @@ const Dashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [barangMasukPending, setBarangMasukPending] = useState(0);
+  const [barangMasukDone, setBarangMasukDone] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
@@ -146,6 +149,16 @@ const Dashboard = () => {
 
       if (logs) setRecentLogs(logs);
 
+      // 5. Ambil data barang masuk sisa proyek
+      const { data: barangMasuk } = await supabase
+        .from('barang_masuk')
+        .select('id, status');
+
+      if (barangMasuk) {
+        setBarangMasukPending(barangMasuk.filter(b => b.status === 'pending').length);
+        setBarangMasukDone(barangMasuk.filter(b => b.status === 'masuk_inventaris').length);
+      }
+
     } catch (error: any) {
       console.error('Error fetching dashboard stats:', error.message);
     } finally {
@@ -254,6 +267,25 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* ALERT: Barang Masuk Pending */}
+        {barangMasukPending > 0 && (
+          <div
+            className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-amber-100 transition-colors"
+            onClick={() => navigate('/barang-masuk')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                <FiPackage className="text-amber-600 text-xl" />
+              </div>
+              <div>
+                <p className="font-black text-amber-800 text-sm">Barang Masuk Belum Diproses</p>
+                <p className="text-amber-600 text-xs font-medium">{barangMasukPending} item sisa proyek menunggu dimasukkan ke inventaris</p>
+              </div>
+            </div>
+            <span className="text-2xl font-black text-amber-700 shrink-0">{barangMasukPending}</span>
+          </div>
+        )}
+
         {/* SECTION 1: Master Aset Perusahaan */}
         <div className="mb-3 md:mb-4">
           <h2 className="text-base md:text-lg font-bold text-slate-700 flex items-center gap-2">
@@ -286,6 +318,33 @@ const Dashboard = () => {
             subtitle="Perlu perbaikan"
             colorClass="bg-gradient-to-br from-red-500 to-red-600 text-white"
             onClick={() => navigate('/utama')}
+          />
+        </div>
+
+        {/* SECTION: Barang Masuk Sisa Proyek */}
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-base md:text-lg font-bold text-slate-700 flex items-center gap-2">
+            <FiPackage className="text-amber-500 text-sm md:text-base" />
+            Barang Masuk Sisa Proyek
+          </h2>
+          <p className="text-xs md:text-sm text-gray-500">Barang bekas proyek yang dikirim ke gudang</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8">
+          <StatCard
+            icon={<FiPackage />}
+            title="Menunggu Proses"
+            value={barangMasukPending}
+            subtitle="Belum masuk inventaris"
+            colorClass="bg-amber-50 text-amber-600 border border-amber-200"
+            onClick={() => navigate('/barang-masuk')}
+          />
+          <StatCard
+            icon={<FaCheckCircle />}
+            title="Sudah Masuk Inventaris"
+            value={barangMasukDone}
+            subtitle="Berhasil diproses"
+            colorClass="bg-emerald-50 text-emerald-600 border border-emerald-200"
+            onClick={() => navigate('/barang-masuk')}
           />
         </div>
 
