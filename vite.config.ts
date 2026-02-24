@@ -9,6 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       workbox: {
+        // Naikkan limit file PWA dari default 2MB → 3MB
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Melakukan caching pada semua file statis (JS, CSS, Gambar)
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // Menambahkan runtime caching untuk data dari Supabase
