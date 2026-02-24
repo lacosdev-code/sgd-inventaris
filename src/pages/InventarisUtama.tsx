@@ -3,11 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import { useInventaris } from '../hooks/useInventaris';
 import { supabase } from '../services/supabase';
 import { QRCodeSVG } from 'qrcode.react';
-import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload, FiEdit, FiImage } from 'react-icons/fi';
+import { FiPlus, FiTrash, FiFileText, FiSearch, FiCamera, FiLoader, FiDownload, FiUpload, FiEdit, FiImage, FiBox, FiAlertTriangle, FiCheckCircle, FiTool, FiUserCheck } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import QRScanner from '../components/Inventaris/QRScanner';
 import ItemModal from '../components/Inventaris/ItemModal';
+import AssignAssetModal from '../components/Inventaris/AssignAssetModal';
 
 const InventarisUtama = () => {
   const { items, loading, deleteItem, upsertItem } = useInventaris();
@@ -27,6 +28,8 @@ const InventarisUtama = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<any>(null);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [itemToAssign, setItemToAssign] = useState<any>(null);
 
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -107,6 +110,11 @@ const InventarisUtama = () => {
     setIsModalOpen(true);
   };
 
+  const openAssignModal = (item: any) => {
+    setItemToAssign(item);
+    setIsAssignModalOpen(true);
+  };
+
   const openEditModal = async (item: any) => {
     // Need to fetch full item details including images to be sure
     // Or just pass the item if we trust the list view has enough data?
@@ -147,6 +155,12 @@ const InventarisUtama = () => {
     (item.kondisi && item.kondisi.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Calculate Metrics
+  const totalBarang = items.length;
+  const stokMenipis = items.filter(item => item.jumlah_tersedia > 0 && item.jumlah_tersedia < 5).length;
+  const kondisiBagus = items.filter(item => item.kondisi?.toLowerCase() === 'bagus' || item.kondisi?.toLowerCase() === 'baik').length;
+  const perluPerbaikan = items.filter(item => item.kondisi?.toLowerCase().includes('rusak')).length;
+
   return (
     <div className="space-y-6 animate-fade-in">
       {showScanner && <QRScanner onResult={handleScanResult} onClose={() => setShowScanner(false)} />}
@@ -158,46 +172,96 @@ const InventarisUtama = () => {
         onSuccess={handleSuccess}
         itemToEdit={itemToEdit}
       />
+      <AssignAssetModal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        itemToAssign={itemToAssign}
+        onSuccess={handleSuccess}
+      />
 
-      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 rounded-3xl shadow-modern-lg border border-gray-100/50">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-sgd-100 rounded-full blur-3xl opacity-30 -mr-32 -mt-32"></div>
-        <div className="relative">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-sgd-50 rounded-xl">
-              <FiFileText className="text-sgd-600 text-xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-sgd-900 p-8 rounded-3xl shadow-2xl border border-slate-700/50">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-sgd-500 rounded-full blur-[100px] opacity-20 -mr-32 -mt-32 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500 rounded-full blur-[80px] opacity-10 -ml-20 -mb-20 pointer-events-none"></div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="text-white">
+            <div className="flex items-center gap-4 mb-3">
+              <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10">
+                <FiFileText className="text-sgd-300 text-2xl" />
+              </div>
+              <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">
+                Master Aset
+              </h1>
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Master Aset</h1>
+            <p className="text-slate-400 text-lg font-medium ml-1">Kelola dan pantau seluruh inventaris perusahaan secara real-time</p>
           </div>
-          <p className="text-gray-500 mt-1">Kelola semua inventaris perusahaan</p>
         </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-xl p-6 rounded-3xl shadow-modern border border-gray-100/50">
-        <div className="flex gap-3 flex-wrap items-center">
-          <div className="relative flex-1 min-w-[280px] group">
-            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-sgd-600 transition-colors text-lg" />
-            <input
-              type="text"
-              placeholder="Cari alat / kode..."
-              className="pl-12 pr-4 py-3.5 w-full bg-slate-50/80 border-2 border-slate-200/50 rounded-2xl focus:border-sgd-400 focus:bg-white outline-none transition-all duration-300 text-sm font-semibold placeholder:text-slate-400 shadow-sm focus:shadow-md"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+      {/* --- KPI Cards --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-modern border border-gray-100/50 flex flex-col items-center justify-center relative overflow-hidden group hover:shadow-modern-lg transition-all">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-blue-500/20 transition-all"></div>
+          <FiBox className="text-blue-500 text-3xl mb-3 relative z-10" />
+          <h3 className="text-3xl font-black text-slate-800 relative z-10">{totalBarang}</h3>
+          <p className="text-slate-500 text-sm font-semibold mt-1 relative z-10">Total Barang</p>
+        </div>
 
+        <div className="bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-modern border border-gray-100/50 flex flex-col items-center justify-center relative overflow-hidden group hover:shadow-modern-lg transition-all">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-orange-500/20 transition-all"></div>
+          <FiAlertTriangle className="text-orange-500 text-3xl mb-3 relative z-10" />
+          <h3 className="text-3xl font-black text-slate-800 relative z-10">{stokMenipis}</h3>
+          <p className="text-slate-500 text-sm font-semibold mt-1 relative z-10">Stok Menipis (&lt;5)</p>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-modern border border-gray-100/50 flex flex-col items-center justify-center relative overflow-hidden group hover:shadow-modern-lg transition-all">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-green-500/20 transition-all"></div>
+          <FiCheckCircle className="text-green-500 text-3xl mb-3 relative z-10" />
+          <h3 className="text-3xl font-black text-slate-800 relative z-10">{kondisiBagus}</h3>
+          <p className="text-slate-500 text-sm font-semibold mt-1 relative z-10">Kondisi Baik</p>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-modern border border-gray-100/50 flex flex-col items-center justify-center relative overflow-hidden group hover:shadow-modern-lg transition-all">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-red-500/20 transition-all"></div>
+          <FiTool className="text-red-500 text-3xl mb-3 relative z-10" />
+          <h3 className="text-3xl font-black text-slate-800 relative z-10">{perluPerbaikan}</h3>
+          <p className="text-slate-500 text-sm font-semibold mt-1 relative z-10">Perlu Perbaikan</p>
+        </div>
+      </div>
+
+      {/* --- Action Bar --- */}
+      <div className="bg-white/80 backdrop-blur-xl p-5 md:p-6 rounded-3xl shadow-modern border border-gray-100/50 flex flex-col xl:flex-row gap-5 items-center justify-between">
+
+        {/* Search */}
+        <div className="w-full xl:w-[400px] relative group">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <FiSearch className="text-slate-400 group-focus-within:text-sgd-500 transition-colors text-lg" />
+          </div>
+          <input
+            type="text"
+            placeholder="Cari nama, kode, kondisi, atau lokasi..."
+            className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sgd-300 focus:bg-white focus:ring-4 focus:ring-sgd-100 outline-none transition-all duration-300 text-sm font-semibold placeholder:text-slate-400 shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-center xl:justify-end gap-3 w-full xl:w-auto">
           <button
             onClick={() => setShowScanner(true)}
-            className="group bg-gradient-to-br from-slate-100 to-slate-50 hover:from-slate-200 hover:to-slate-100 text-slate-700 px-5 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all duration-300 hover:shadow-lg active:scale-95 border border-slate-200/50"
+            className="flex-1 sm:flex-none justify-center group bg-white border-2 border-slate-200/60 hover:border-sgd-300 text-slate-600 hover:text-sgd-600 px-5 py-3 rounded-2xl flex gap-2.5 items-center transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
           >
-            <FiCamera className="text-lg transition-transform duration-300 group-hover:scale-110 group-hover:text-sgd-600" />
-            <span className="hidden sm:inline font-bold text-sm">Scan QR</span>
+            <FiCamera className="text-lg transition-transform duration-300 group-hover:scale-110" />
+            <span className="font-bold text-sm">Scan QR</span>
           </button>
+
+          <div className="hidden sm:block w-px h-10 bg-slate-200 mx-1"></div>
 
           <button
             onClick={downloadTemplate}
-            className="group bg-white border-2 border-slate-200/50 text-slate-700 hover:border-sgd-400 hover:text-sgd-700 px-5 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-sm hover:shadow-md active:scale-95"
+            className="flex-1 sm:flex-none justify-center group bg-slate-50 hover:bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl flex gap-2.5 items-center transition-all duration-300 active:scale-95 border border-slate-200/50"
           >
-            <FiDownload className="text-lg transition-all duration-300 group-hover:-translate-y-1 group-hover:text-sgd-600" />
+            <FiDownload className="text-lg transition-transform duration-300 group-hover:-translate-y-1 group-hover:text-slate-900" />
             <span className="font-bold text-sm">Template</span>
           </button>
 
@@ -210,76 +274,81 @@ const InventarisUtama = () => {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-5 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg hover:shadow-xl active:scale-95 group"
+            className="flex-1 sm:flex-none justify-center group bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-2xl flex gap-2.5 items-center transition-all shadow-md hover:shadow-lg active:scale-95 border border-slate-700"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-            <FiUpload className="text-sgd-400 text-lg relative z-10 group-hover:scale-110 transition-transform" />
-            <span className="font-bold text-sm relative z-10">Import Excel</span>
+            <FiUpload className="text-sgd-300 text-lg transition-transform duration-300 group-hover:-translate-y-1" />
+            <span className="font-bold text-sm">Import Excel</span>
           </button>
 
           <button
             onClick={openAddModal}
-            className="relative overflow-hidden bg-gold-gradient text-white px-6 py-3.5 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group"
+            className="flex-1 sm:flex-none justify-center relative overflow-hidden bg-gradient-to-br from-sgd-400 to-sgd-600 text-white px-6 py-3 rounded-2xl flex gap-2.5 items-center transition-all shadow-lg shadow-sgd-500/30 hover:shadow-xl hover:shadow-sgd-500/40 active:scale-95 group border border-sgd-400/50"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
             <FiPlus className="text-lg relative z-10 group-hover:rotate-90 transition-transform duration-300" />
-            <span className="hidden sm:inline font-black text-sm relative z-10">Tambah</span>
+            <span className="font-black text-sm relative z-10">Tambah Item</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-gradient-to-br from-white to-slate-50/30 rounded-3xl shadow-modern-lg border border-gray-100/50 overflow-hidden">
+      {/* --- Data Table --- */}
+      <div className="bg-white rounded-3xl shadow-modern-lg border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gradient-to-r from-slate-900 to-slate-800 text-white text-xs uppercase tracking-wider">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider">
               <tr>
-                <th className="p-5 font-black">Nama Barang</th>
-                <th className="p-5 font-black">Stok (Sisa/Total)</th>
-                <th className="p-5 font-black">Kondisi</th>
-                <th className="p-5 font-black">Lokasi</th>
-                <th className="p-5 font-black text-center">Foto</th>
-                <th className="p-5 font-black text-center">QR Code</th>
-                <th className="p-5 font-black text-center">Aksi</th>
+                <th className="p-5 pl-8">Nama & Kode</th>
+                <th className="p-5">Ketersediaan Stok</th>
+                <th className="p-5 text-center">Kondisi</th>
+                <th className="p-5">Lokasi</th>
+                <th className="p-5 text-center">Foto</th>
+                <th className="p-5 text-center">QR</th>
+                <th className="p-5 pr-8 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={6} className="p-16 text-center text-slate-400"><div className="flex justify-center items-center gap-3"><FiLoader className="animate-spin text-2xl text-sgd-500" /> <span className="font-semibold">Memuat data...</span></div></td></tr>
+                <tr><td colSpan={7} className="p-16 text-center text-slate-400"><div className="flex justify-center items-center gap-3"><FiLoader className="animate-spin text-2xl text-sgd-500" /> <span className="font-semibold">Memuat data...</span></div></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="p-16 text-center text-slate-400 font-semibold">Data tidak ditemukan.</td></tr>
+                <tr><td colSpan={7} className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3"><FiBox className="text-4xl text-slate-200" /><span className="font-semibold">Tidak ada data aset ditemukan.</span></td></tr>
               ) : filtered.map((item, index) => (
                 <tr
                   key={item.id}
-                  className="hover:bg-gradient-to-r hover:from-sgd-50/30 hover:to-transparent transition-all duration-300 group animate-fade-in-up"
-                  style={{ animationDelay: `${index * 50}ms` }}
+                  className="hover:bg-slate-50/80 transition-colors duration-200 group animate-fade-in-up"
+                  style={{ animationDelay: `${index * 30}ms` }}
                 >
-                  <td className="p-5">
-                    <div className="font-black text-slate-900 text-base">{item.nama}</div>
-                    <div className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded-lg w-fit mt-1.5 font-semibold">{item.kode_alat}</div>
-                  </td>
-                  <td className="p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-baseline gap-2 mb-1.5">
-                          <span className={`text-2xl font-black ${item.jumlah_tersedia < 5 ? "text-orange-500" : "text-green-600"}`}>{item.jumlah_tersedia}</span>
-                          <span className="text-slate-400 font-semibold">/ {item.jumlah}</span>
+                  <td className="p-5 pl-8">
+                    <div className="font-bold text-slate-800 text-[15px] mb-1.5">{item.nama}</div>
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <div className="text-[11px] text-slate-500 font-mono bg-slate-100/80 px-2.5 py-1 rounded-lg w-fit font-semibold border border-slate-200/60 shadow-sm">{item.kode_alat}</div>
+                      {item.assigned_to && item.technicians && (
+                        <div className="text-[10px] text-indigo-700 bg-indigo-50 flex items-center gap-1.5 font-bold px-2.5 py-1 rounded-lg border border-indigo-200/60 shadow-sm" title="Ditugaskan ke Personel">
+                          <FiUserCheck className="text-indigo-500" /> {item.technicians.name}
                         </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${item.jumlah_tersedia < 5 ? 'bg-gradient-to-r from-orange-500 to-orange-400' : 'bg-gradient-to-r from-green-500 to-green-600'}`}
-                            style={{ width: `${(item.jumlah_tersedia / item.jumlah) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </td>
                   <td className="p-5">
-                    <span className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black uppercase shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-                      : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                    <div className="max-w-[150px]">
+                      <div className="flex items-baseline justify-between gap-2 mb-2">
+                        <span className={`text-xl font-black tracking-tight ${item.jumlah_tersedia < 5 ? "text-orange-500" : "text-emerald-500"}`}>{item.jumlah_tersedia}</span>
+                        <span className="text-slate-400 text-xs font-semibold">/ {item.jumlah} total</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${item.jumlah_tersedia < 5 ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.max(5, (item.jumlah_tersedia / Math.max(1, item.jumlah)) * 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-5 text-center">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border ${item.kondisi?.toLowerCase().includes('rusak')
+                      ? 'bg-red-50 text-red-600 border-red-200/60'
+                      : 'bg-emerald-50 text-emerald-600 border-emerald-200/60'
                       }`}>
-                      {item.kondisi?.toLowerCase().includes('rusak') ? '⚠️' : '✓'}
-                      {item.kondisi}
+                      {item.kondisi?.toLowerCase().includes('rusak') ? <FiTool className="text-[10px]" /> : <FiCheckCircle className="text-[10px]" />}
+                      <span className="uppercase tracking-wide">{item.kondisi}</span>
                     </span>
                   </td>
                   <td className="p-5">
@@ -307,18 +376,25 @@ const InventarisUtama = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="p-5 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="p-5 pr-8">
+                    <div className="flex items-center justify-end gap-1.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300">
+                      <button
+                        onClick={() => openAssignModal(item)}
+                        className={`p-2.5 transition-all duration-200 rounded-xl hover:scale-105 active:scale-95 shadow-sm border border-transparent ${item.assigned_to ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200'}`}
+                        title="Tugaskan Personel"
+                      >
+                        <FiUserCheck className="text-lg" />
+                      </button>
                       <button
                         onClick={() => openEditModal(item)}
-                        className="group/edit p-3 text-slate-400 hover:text-white hover:bg-sgd-500 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
+                        className="p-2.5 text-slate-400 hover:text-sgd-600 hover:bg-sgd-50 transition-all duration-200 rounded-xl hover:scale-105 active:scale-95 shadow-sm border border-transparent hover:border-sgd-200"
                         title="Edit Item"
                       >
                         <FiEdit className="text-lg" />
                       </button>
                       <button
                         onClick={() => item.id && deleteItem(item.id)}
-                        className="group/del p-3 text-slate-400 hover:text-white hover:bg-gradient-to-r hover:from-red-500 hover:to-red-600 transition-all duration-300 rounded-xl hover:scale-110 active:scale-95 shadow-sm hover:shadow-lg"
+                        className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200 rounded-xl hover:scale-105 active:scale-95 shadow-sm border border-transparent hover:border-red-200"
                         title="Hapus Item"
                       >
                         <FiTrash className="text-lg" />

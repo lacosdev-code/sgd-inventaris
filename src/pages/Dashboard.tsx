@@ -74,7 +74,7 @@ const Dashboard = () => {
       // 3. Ambil data inventaris per orang
       const { data: personnelItems } = await supabase
         .from('inventaris_orang')
-        .select('*');
+        .select('id, orang, nama, jumlah, kondisi, technician_id');
 
       if (items) {
         // Normalisasi kondisi agar case-insensitive

@@ -36,15 +36,30 @@ const InventarisOrang = () => {
     try {
       setLoading(true);
 
-      // 1. Fetch permanent assignments
+      // 1. Fetch technicians for avatar and sync status
+      const { data: techListData } = await supabase
+        .from('technicians')
+        .select('id, name, avatar_url');
+
+      const techMap = (techListData || []).reduce((acc: any, t) => {
+        acc[t.name.trim().toLowerCase()] = t;
+        return acc;
+      }, {});
+
+      const techIdMap = (techListData || []).reduce((acc: any, t) => {
+        acc[t.id] = t;
+        return acc;
+      }, {});
+
+      // 2. Fetch permanent assignments
       const { data: permanentData, error: permError } = await supabase
         .from('inventaris_orang')
-        .select('*')
+        .select('id, orang, nama, jumlah, kondisi, technician_id')
         .order('orang', { ascending: true });
 
       if (permError) console.error('Permanent items error:', permError);
 
-      // 2. Fetch active loans
+      // 3. Fetch active loans
       const { data: loanData, error: loanError } = await supabase
         .from('peminjaman')
         .select('id, peminjam, barang_nama, tgl_pinjam, tgl_kembali_rencana, kondisi_pinjam')
@@ -53,26 +68,69 @@ const InventarisOrang = () => {
 
       if (loanError) console.error('Loan items error:', loanError);
 
-      // 3. Transform permanent items
-      const permanentItems = (permanentData || []).map(item => ({
-        ...item,
-        type: 'permanent' as const
-      }));
+      // 4. Fetch assets assigned directly in inventaris_utama
+      const { data: assignedAssetData, error: assignedError } = await supabase
+        .from('inventaris_utama')
+        .select('id, nama, assigned_to, kondisi, jumlah_tersedia, kode_alat')
+        .not('assigned_to', 'is', null);
 
-      // 4. Transform loan items
-      const loanItems = (loanData || []).map(loan => ({
-        id: `loan-${loan.id}`,
-        orang: loan.peminjam,
-        nama: loan.barang_nama,
-        jumlah: 1,
-        kondisi: loan.kondisi_pinjam || 'Tidak Diketahui',
-        type: 'loan' as const,
-        tgl_kembali: loan.tgl_kembali_rencana,
-        loan_id: loan.id
-      }));
+      if (assignedError) console.error('Assigned assets error:', assignedError);
 
-      // 5. Merge both datasets
-      const mergedData = [...permanentItems, ...loanItems];
+      // 5. Transform permanent items with tech link
+      const permanentItems = (permanentData || []).map(item => {
+        const techMatch = techMap[item.orang.trim().toLowerCase()];
+        return {
+          ...item,
+          type: 'permanent' as const,
+          tech_info: techMatch || null
+        };
+      });
+
+      // 6. Transform loan items with tech link
+      const loanItems = (loanData || []).map(loan => {
+        const techMatch = techMap[loan.peminjam.trim().toLowerCase()];
+        return {
+          id: `loan-${loan.id}`,
+          orang: loan.peminjam,
+          nama: loan.barang_nama,
+          jumlah: 1,
+          kondisi: loan.kondisi_pinjam || 'Tidak Diketahui',
+          type: 'loan' as const,
+          tgl_kembali: loan.tgl_kembali_rencana,
+          loan_id: loan.id,
+          tech_info: techMatch || null
+        };
+      });
+
+      // 7. Transform direct assignments from inventaris_utama
+      // Filter out items that are already in permanentItems to avoid duplicates
+      // We look at item.nama and item.orang matches
+      const assignedItems = (assignedAssetData || []).map(asset => {
+        const techMatch = techIdMap[asset.assigned_to];
+        if (!techMatch) return null;
+
+        // Check if this asset is already represented in permanentItems
+        const isDuplicate = permanentItems.some(p =>
+          p.nama === asset.nama &&
+          p.orang.trim().toLowerCase() === techMatch.name.trim().toLowerCase()
+        );
+
+        if (isDuplicate) return null;
+
+        return {
+          id: `assigned-${asset.id}`,
+          orang: techMatch.name,
+          nama: asset.nama,
+          jumlah: 1,
+          kondisi: asset.kondisi || 'Bagus',
+          type: 'permanent' as const, // Treat as permanent/toolkit since it's assigned in the master list
+          tech_info: techMatch || null,
+          asset_info: asset
+        };
+      }).filter(Boolean);
+
+      // 8. Merge all datasets
+      const mergedData = [...permanentItems, ...loanItems, ...assignedItems];
       setDataOrang(mergedData);
     } catch (error: any) {
       console.error('Error:', error.message);
@@ -95,6 +153,69 @@ const InventarisOrang = () => {
       }
     } catch (error) {
       console.error('Error fetching items:', error);
+    }
+  };
+
+  const handleRelinkPerson = async (personName: string) => {
+    try {
+      // 1. Fetch technicians for selection
+      const { data: techs, error: techError } = await supabase
+        .from('technicians')
+        .select('id, name')
+        .order('name');
+
+      if (techError) throw techError;
+
+      const techOptions = (techs || []).reduce((acc: any, t) => {
+        acc[t.id] = t.name;
+        return acc;
+      }, {});
+
+      // 2. Show Selection Modal
+      const { value: selectedTechId } = await Swal.fire({
+        title: 'Hubungkan ke Profil Teknisi',
+        text: `Pilih profil teknisi yang sesuai untuk "${personName}" agar data tersinkron ke PWA.`,
+        input: 'select',
+        inputOptions: techOptions,
+        inputPlaceholder: 'Pilih Teknisi...',
+        showCancelButton: true,
+        confirmButtonText: 'Hubungkan Sekarang',
+        confirmButtonColor: '#013220',
+        cancelButtonText: 'Batal',
+        inputValidator: (value) => {
+          if (!value) return 'Anda harus memilih teknisi!';
+          return null;
+        }
+      });
+
+      if (selectedTechId) {
+        setLoading(true);
+        // 3. Update all inventaris_orang entries for this person
+        const { error: updateError } = await supabase
+          .from('inventaris_orang')
+          .update({ technician_id: selectedTechId })
+          .eq('orang', personName);
+
+        if (updateError) throw updateError;
+
+        // 4. Force trigger sync for all items this person has
+        // The trigger on inventaris_orang will handle updating inventaris_utama.assigned_to
+        // when we update the technician_id above.
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Berhasil Dihubungkan!',
+          text: `Data ${personName} kini tersinkron dengan profil teknisi.`,
+          timer: 2000,
+          showConfirmButton: false
+        });
+
+        fetchDataOrang();
+      }
+    } catch (error: any) {
+      Swal.fire('Gagal', error.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,7 +247,8 @@ const InventarisOrang = () => {
           orang: newPersonName.trim(),
           nama: selectedItem.nama,
           jumlah: assignQty,
-          kondisi: assignCondition
+          kondisi: assignCondition,
+          asset_id: selectedItemId // Formalize the link
         });
 
       if (insertError) throw insertError;
@@ -511,170 +633,219 @@ const InventarisOrang = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredOrang.map((nama) => (
-            <div key={nama} className="group bg-gradient-to-br from-white to-slate-50/30 rounded-3xl shadow-modern border border-gray-100/50 overflow-hidden hover:shadow-modern-lg transition-all duration-500 hover:-translate-y-1">
-              {/* Card Header */}
-              <div className="relative p-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-32 h-32 bg-sgd-400 opacity-20 rounded-full blur-3xl"></div>
-                <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-sgd-500 opacity-10 rounded-full blur-2xl"></div>
+          {filteredOrang.map((nama) => {
+            const items = groupedData[nama];
+            const techInfo = items[0]?.tech_info;
+            const isSynced = !!techInfo;
 
-                <div className="relative z-10 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gold-gradient rounded-2xl flex items-center justify-center text-2xl shadow-lg transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                      <FaUser />
-                    </div>
-                    <div>
-                      <h3 className="font-black text-xl mb-1">{nama}</h3>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-sgd-400 rounded-full animate-pulse"></div>
-                        <p className="text-sgd-300 text-sm font-bold">{groupedData[nama].length} Item Terdata</p>
+            return (
+              <div key={nama} className="group bg-white rounded-[2.5rem] shadow-modern border border-slate-100 overflow-hidden hover:shadow-modern-xl transition-all duration-500 hover:-translate-y-2 flex flex-col">
+                {/* Card Header - Premium Dark Design */}
+                <div className="relative p-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden shrink-0">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-sgd-500/10 rounded-full blur-[60px] pointer-events-none group-hover:scale-150 transition-transform duration-1000"></div>
+                  <div className="absolute left-1/4 bottom-0 w-32 h-32 bg-sgd-400/5 rounded-full blur-[40px] pointer-events-none"></div>
+
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-5">
+                        <div className="relative group/avatar">
+                          <div className="absolute inset-0 bg-gold-gradient rounded-3xl blur-md opacity-40 group-hover/avatar:opacity-60 transition-opacity"></div>
+                          <div className="relative w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-3xl shadow-xl border-2 border-white/10 overflow-hidden p-0.5">
+                            {techInfo?.avatar_url ? (
+                              <img src={techInfo.avatar_url} alt={nama} className="w-full h-full object-cover rounded-[1.25rem]" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-50 flex items-center justify-center text-slate-300 font-black">
+                                {nama.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                          {isSynced && (
+                            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-4 border-slate-900 rounded-full flex items-center justify-center shadow-lg" title="Technician ID Synced">
+                              <FaSync size={8} className="text-white animate-spin-slow" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-black text-xl tracking-tight leading-none group-hover:text-sgd-400 transition-colors uppercase">{nama}</h3>
+                          <div className="flex items-center gap-2 mt-2">
+                            {isSynced ? (
+                              <span className="text-[9px] font-black bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-lg border border-emerald-500/20 tracking-widest uppercase">PWA Linked</span>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-black bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-lg border border-white/5 tracking-widest uppercase italic opacity-60">Unlinked Name</span>
+                                <button
+                                  onClick={() => handleRelinkPerson(nama)}
+                                  className="text-[9px] font-black text-sgd-400 hover:text-sgd-300 underline uppercase tracking-tighter"
+                                >
+                                  Relink Profile
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => exportPersonPDF(nama, items)}
+                          className="w-10 h-10 bg-white/5 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-2xl transition-all duration-300 flex items-center justify-center border border-white/5 backdrop-blur-md active:scale-90"
+                          title="Export PDF"
+                        >
+                          <FaFilePdf size={18} />
+                        </button>
+                        <button
+                          onClick={() => shareToWA(nama, items)}
+                          className="w-10 h-10 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-2xl transition-all duration-300 flex items-center justify-center border border-white/5 backdrop-blur-md active:scale-90"
+                          title="WhatsApp Sync"
+                        >
+                          <FaWhatsapp size={18} />
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => exportPersonPDF(nama, groupedData[nama])}
-                      className="group/pdf p-3.5 bg-white/10 hover:bg-red-600 rounded-2xl transition-all duration-300 backdrop-blur-sm border border-white/20 hover:scale-110 active:scale-95"
-                      title="Export PDF"
-                    >
-                      <FaFilePdf size={24} className="text-red-400 group-hover/pdf:text-white transition-colors" />
-                    </button>
-                    <button
-                      onClick={() => shareToWA(nama, groupedData[nama])}
-                      className="group/wa p-3.5 bg-white/10 hover:bg-[#25D366] rounded-2xl transition-all duration-300 backdrop-blur-sm border border-white/20 hover:scale-110 active:scale-95"
-                      title="Kirim Rekap WA"
-                    >
-                      <FaWhatsapp size={24} className="text-[#25D366] group-hover/wa:text-white transition-colors" />
-                    </button>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="bg-white/5 border border-white/10 p-3 rounded-2xl backdrop-blur-sm">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Aset</p>
+                        <h4 className="text-lg font-black">{items.length} <span className="text-xs text-slate-500 font-bold tracking-tight">ITEM</span></h4>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 p-3 rounded-2xl backdrop-blur-sm">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Kondisi Aman</p>
+                        <h4 className="text-lg font-black text-emerald-400">{items.filter((i: any) => i.kondisi?.toLowerCase().includes('bagus') || i.kondisi?.toLowerCase().includes('baik')).length} <span className="text-xs text-emerald-900 font-bold tracking-tight">ALAT</span></h4>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Card Body */}
-              <div className="p-5 space-y-3">
-                {groupedData[nama].map((item: any, idx: number) => (
-                  <div key={item.id || idx} className="group/item flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md hover:border-sgd-200 transition-all duration-300">
-                    <div className="flex items-center gap-3.5">
-                      <div className={`p-3 rounded-xl shadow-sm transition-all duration-300 group-hover/item:scale-110 ${item.kondisi?.toLowerCase().includes('rusak')
-                        ? 'text-white bg-gradient-to-br from-red-500 to-red-600'
-                        : 'text-sgd-700 bg-gradient-to-br from-sgd-100 to-sgd-50'
-                        }`}>
-                        {item.kondisi?.toLowerCase().includes('rusak') ? <FaExclamationTriangle size={18} /> : <FaToolbox size={18} />}
+                {/* Card Body - List of items */}
+                <div className="flex-1 p-6 space-y-4 bg-slate-50/30 overflow-y-auto max-h-[400px] scrollbar-hide">
+                  {items.map((item: any, idx: number) => (
+                    <div key={item.id || idx} className="group/item relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100/50 hover:shadow-lg hover:border-sgd-200 transition-all duration-300">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl transition-all duration-300 shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
+                          ? 'bg-red-50 text-red-500 ring-1 ring-red-100'
+                          : 'bg-sgd-50 text-sgd-700 ring-1 ring-sgd-100'
+                          }`}>
+                          {item.kondisi?.toLowerCase().includes('rusak') ? <FaExclamationTriangle /> : <FaToolbox />}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-slate-900 truncate pr-2 tracking-tight uppercase">{item.nama}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md tracking-[0.1em] uppercase shadow-sm border ${item.type === 'permanent'
+                              ? 'bg-blue-50 text-blue-600 border-blue-100'
+                              : 'bg-orange-50 text-orange-600 border-orange-100'
+                              }`}>
+                              {item.type === 'permanent' ? 'Toolkit' : 'Loan'}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">{item.jumlah} Unit</span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-black text-slate-900">{item.nama}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${item.type === 'permanent'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-orange-100 text-orange-700'
-                            }`}>
-                            {item.type === 'permanent' ? '📦 Tetap' : '🔄 Pinjaman'}
-                          </span>
-                          <p className="text-xs text-slate-500 font-semibold">
-                            {item.jumlah} Unit
-                            {item.type === 'loan' && item.tgl_kembali && (
-                              <span className="text-orange-600"> • Kembali: {format(new Date(item.tgl_kembali), 'dd/MM/yy')}</span>
-                            )}
-                          </p>
+                      <div className="flex items-center gap-2">
+                        {item.type === 'permanent' && (
+                          <button
+                            onClick={() => handleEditClick(item)}
+                            className="w-8 h-8 bg-slate-50 hover:bg-sgd-50 text-slate-400 hover:text-sgd-600 rounded-lg transition-all flex items-center justify-center border border-slate-100 group/btn"
+                            title="Edit"
+                          >
+                            <FaEdit size={12} className="group-hover/btn:scale-110" />
+                          </button>
+                        )}
+                        <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                          }`}>
+                          {item.kondisi}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {item.type === 'permanent' && (
-                        <button
-                          onClick={() => handleEditClick(item)}
-                          className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Data"
-                        >
-                          <FaEdit size={14} />
-                        </button>
-                      )}
-                      <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${item.kondisi?.toLowerCase().includes('rusak')
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-                        : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                        }`}>
-                        {item.kondisi?.toLowerCase().includes('rusak') ? '⚠️' : '✓'} {item.kondisi}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* Footer */}
-              <div className="px-6 py-5 bg-gradient-to-r from-slate-50 to-white border-t border-slate-100 flex justify-center">
-                <button
-                  onClick={() => handleAddItem(nama)}
-                  className="group/add text-xs font-black text-slate-500 hover:text-sgd-700 transition-all flex items-center gap-2.5"
-                >
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-200 to-slate-100 group-hover/add:from-sgd-500 group-hover/add:to-sgd-600 text-slate-600 group-hover/add:text-white flex items-center justify-center transition-all duration-300 group-hover/add:scale-110 shadow-sm">
-                    <FaPlus size={11} />
-                  </div>
-                  TAMBAH ITEM UNTUK {nama.toUpperCase()}
-                </button>
+                {/* Card Footer */}
+                <div className="p-4 border-t border-slate-100 bg-white">
+                  <button
+                    onClick={() => handleAddItem(nama)}
+                    className="w-full py-3 bg-slate-50 hover:bg-sgd-500 text-slate-400 hover:text-white rounded-2xl font-black text-[10px] tracking-[0.2em] uppercase transition-all duration-300 flex items-center justify-center gap-3 group/add shadow-inner hover:shadow-lg active:scale-95"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-white group-hover/add:bg-white/20 flex items-center justify-center transition-colors">
+                      <FaPlus size={10} className="group-hover/add:text-white" />
+                    </div>
+                    Tugaskan Alat Baru
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {/* Add Personnel Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl md:rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-            {/* Modal Header - Fixed */}
-            <div className="p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-sgd-50 to-white flex-shrink-0">
-              <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-slate-900 flex items-center gap-2 md:gap-3">
-                <div className="p-1.5 md:p-2 bg-sgd-600 rounded-lg md:rounded-xl text-white">
-                  <FaPlus className="text-sm md:text-base" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-white/20">
+            {/* Modal Header */}
+            <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex-shrink-0 relative">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-sgd-100 rounded-full blur-3xl opacity-20 -mr-16 -mt-16"></div>
+              <h2 className="text-2xl font-black text-slate-900 flex items-center gap-4 relative z-10">
+                <div className="p-3 bg-sgd-500 rounded-2xl text-white shadow-lg ring-4 ring-sgd-50">
+                  <FaPlus size={20} />
                 </div>
-                Tambah Personel Baru
+                PENUGASAN BARU
               </h2>
-              <p className="text-xs md:text-sm text-gray-500 mt-1 ml-8 md:ml-14">Tugaskan aset ke personel lapangan</p>
+              <p className="text-sm text-slate-500 mt-2 font-medium tracking-wide">Lengkapi data untuk penugasan aset ke personel lapangan</p>
             </div>
 
-            {/* Modal Body - Scrollable */}
-            <div className="p-4 md:p-6 space-y-4 md:space-y-5 overflow-y-auto flex-1">
+            {/* Modal Body */}
+            <div className="p-8 space-y-6 overflow-y-auto flex-1 bg-white">
               {/* Personnel Name */}
-              <div>
-                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+              <div className="group/field">
+                <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest group-focus-within/field:text-sgd-600 transition-colors">
                   Nama Personel <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={newPersonName}
-                  onChange={(e) => setNewPersonName(e.target.value)}
-                  placeholder="Contoh: John Doe"
-                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
-                />
+                <div className="relative">
+                  <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within/field:text-sgd-500 transition-colors" />
+                  <input
+                    type="text"
+                    value={newPersonName}
+                    onChange={(e) => setNewPersonName(e.target.value)}
+                    placeholder="Masukkan nama lengkap..."
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sgd-300 focus:bg-white focus:ring-4 focus:ring-sgd-50 outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                  />
+                </div>
               </div>
 
               {/* Item Selection */}
-              <div>
-                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+              <div className="group/field">
+                <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest group-focus-within/field:text-sgd-600 transition-colors">
                   Pilih Item dari Master Aset <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={selectedItemId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedItemId(id);
-                    const item = availableItems.find(i => i.id === id);
-                    setSelectedItemName(item?.nama || '');
-                  }}
-                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
-                >
-                  <option value="">-- Pilih Item --</option>
-                  {availableItems.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.nama} (Tersedia: {item.jumlah_tersedia})
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <FaToolbox className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within/field:text-sgd-500 transition-colors" />
+                  <select
+                    value={selectedItemId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedItemId(id);
+                      const item = availableItems.find(i => i.id === id);
+                      setSelectedItemName(item?.nama || '');
+                    }}
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sgd-300 focus:bg-white focus:ring-4 focus:ring-sgd-50 outline-none transition-all font-bold text-slate-700 appearance-none"
+                  >
+                    <option value="">-- Cari & Pilih Item --</option>
+                    {availableItems.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.nama} (Tersedia: {item.jumlah_tersedia})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    ▼
+                  </div>
+                </div>
               </div>
 
               {/* Quantity and Condition */}
-              <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <div>
-                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="group/field">
+                  <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">
                     Jumlah <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -682,37 +853,43 @@ const InventarisOrang = () => {
                     min="1"
                     value={assignQty}
                     onChange={(e) => setAssignQty(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                    className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sgd-300 focus:bg-white outline-none transition-all font-bold text-slate-700"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
-                    Kondisi
+                <div className="group/field">
+                  <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">
+                    Kondisi Awal
                   </label>
                   <select
                     value={assignCondition}
                     onChange={(e) => setAssignCondition(e.target.value)}
-                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-sgd-400 focus:ring-2 focus:ring-sgd-100 outline-none transition-all"
+                    className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-sgd-300 focus:bg-white outline-none transition-all font-bold text-slate-700 appearance-none"
                   >
                     <option value="Bagus">Bagus</option>
-                    <option value="Rusak">Rusak</option>
+                    <option value="Rusak Ringan">Rusak Ringan</option>
+                    <option value="Rusak Berat">Rusak Berat</option>
                   </select>
                 </div>
               </div>
 
               {/* Info Box */}
               {selectedItemId && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 md:p-4">
-                  <p className="text-xs md:text-sm text-blue-800">
-                    <strong>Info:</strong> Stok di Master Aset akan berkurang sebanyak <strong>{assignQty}</strong> unit setelah disimpan.
-                  </p>
+                <div className="bg-sgd-50 border border-sgd-100 rounded-2xl p-5 flex items-start gap-4 animate-fade-in-up">
+                  <div className="p-2 bg-white rounded-lg text-sgd-600 shadow-sm">
+                    <FaSync className="animate-spin-slow" size={14} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-sgd-800 font-bold leading-relaxed">
+                      Sistem akan otomatis mengurangi stok utama sebanyak <span className="text-sgd-600 font-black">{assignQty} unit</span> dan data akan langsung tersinkron ke PWA Teknisi.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Modal Footer - Fixed */}
-            <div className="p-4 md:p-6 border-t border-gray-200 flex gap-2 md:gap-3 justify-end bg-gray-50 flex-shrink-0">
+            {/* Modal Footer */}
+            <div className="p-8 border-t border-slate-100 flex gap-4 bg-slate-50/50 shrink-0">
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -722,15 +899,15 @@ const InventarisOrang = () => {
                   setAssignQty(1);
                   setAssignCondition('Bagus');
                 }}
-                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all"
+                className="flex-1 py-4 px-6 text-sm font-black text-slate-400 hover:text-slate-600 transition-all uppercase tracking-widest"
               >
                 Batal
               </button>
               <button
                 onClick={handleSavePersonnel}
-                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base bg-sgd-600 hover:bg-sgd-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                className="flex-[2] py-4 px-6 bg-slate-900 hover:bg-sgd-600 text-white font-black rounded-2xl transition-all shadow-xl hover:shadow-sgd-200 active:scale-95 uppercase tracking-widest text-sm"
               >
-                Simpan
+                Simpan Penugasan
               </button>
             </div>
           </div>
@@ -739,52 +916,59 @@ const InventarisOrang = () => {
 
       {/* Edit Personnel Modal */}
       {showEditModal && editingItem && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in text-left">
-          <div className="bg-white rounded-2xl md:rounded-3xl w-full max-w-lg overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden flex flex-col shadow-2xl border border-white/20">
             {/* Modal Header */}
-            <div className="p-4 md:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white flex-shrink-0 text-left">
-              <h2 className="text-lg md:text-xl font-bold text-slate-900 flex items-center gap-2 md:gap-3">
-                <div className="p-1.5 md:p-2 bg-blue-600 rounded-lg md:rounded-xl text-white">
-                  <FaEdit className="text-sm md:text-base" />
+            <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-white flex-shrink-0 text-left relative">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100 rounded-full blur-3xl opacity-20 -mr-16 -mt-16"></div>
+              <h2 className="text-2xl font-black text-slate-900 flex items-center gap-4 relative z-10">
+                <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg ring-4 ring-blue-50">
+                  <FaEdit size={20} />
                 </div>
-                Edit Data Personel
+                EDIT PENUGASAN
               </h2>
-              <p className="text-xs md:text-sm text-gray-500 mt-1 ml-8 md:ml-14">Update data aset yang ditugaskan</p>
+              <p className="text-sm text-slate-500 mt-2 font-medium tracking-wide">Sesuaikan data aset yang sedang dibawa personel</p>
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 md:p-6 space-y-4 md:space-y-5 overflow-y-auto flex-1">
+            <div className="p-8 space-y-6 overflow-y-auto flex-1 bg-white">
               {/* Personnel Name */}
-              <div>
-                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+              <div className="group/field">
+                <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest group-focus-within/field:text-blue-600 transition-colors">
                   Nama Personel <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={editPersonName}
-                  onChange={(e) => setEditPersonName(e.target.value)}
-                  placeholder="Contoh: John Doe"
-                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                />
+                <div className="relative">
+                  <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within/field:text-blue-500 transition-colors" />
+                  <input
+                    type="text"
+                    value={editPersonName}
+                    onChange={(e) => setEditPersonName(e.target.value)}
+                    placeholder="Contoh: John Doe"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50 outline-none transition-all font-bold text-slate-700"
+                  />
+                </div>
               </div>
 
               {/* Item Name (Static) */}
-              <div>
-                <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
-                  Nama Barang
+              <div className="group/field">
+                <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">
+                  Nama Barang (Tetap)
                 </label>
-                <input
-                  type="text"
-                  value={editingItem.nama}
-                  disabled
-                  className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-100 bg-gray-50 text-gray-500 rounded-xl outline-none cursor-not-allowed"
-                />
+                <div className="relative">
+                  <FaToolbox className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-200" />
+                  <input
+                    type="text"
+                    value={editingItem.nama}
+                    disabled
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50/50 border-2 border-slate-100 text-slate-400 rounded-2xl outline-none cursor-not-allowed font-bold"
+                  />
+                </div>
               </div>
 
               {/* Quantity and Condition */}
-              <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <div>
-                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="group/field">
+                  <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">
                     Jumlah <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -792,18 +976,18 @@ const InventarisOrang = () => {
                     min="1"
                     value={editQty}
                     onChange={(e) => setEditQty(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-300 focus:bg-white outline-none transition-all font-bold text-slate-700"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-bold text-slate-700 mb-2">
+                <div className="group/field">
+                  <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">
                     Kondisi
                   </label>
                   <select
                     value={editCondition}
                     onChange={(e) => setEditCondition(e.target.value)}
-                    className="w-full px-3 md:px-4 py-2 md:py-3 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-300 focus:bg-white outline-none transition-all font-bold text-slate-700 appearance-none"
                   >
                     <option value="Bagus">Bagus</option>
                     <option value="Rusak Ringan">Rusak Ringan</option>
@@ -814,21 +998,21 @@ const InventarisOrang = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 md:p-6 border-t border-gray-200 flex gap-2 md:gap-3 justify-end bg-gray-50 flex-shrink-0">
+            <div className="p-8 border-t border-slate-100 flex gap-4 bg-slate-50/50 shrink-0">
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingItem(null);
                 }}
-                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-100 transition-all font-bold"
+                className="flex-1 py-4 px-6 text-sm font-black text-slate-400 hover:text-slate-600 transition-all uppercase tracking-widest"
               >
                 Batal
               </button>
               <button
                 onClick={handleUpdatePersonnel}
-                className="h-10 md:h-12 px-4 md:px-6 text-sm md:text-base bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                className="flex-[2] py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-xl hover:shadow-blue-200 active:scale-95 uppercase tracking-widest text-sm"
               >
-                Update Data
+                Perbarui Data
               </button>
             </div>
           </div>

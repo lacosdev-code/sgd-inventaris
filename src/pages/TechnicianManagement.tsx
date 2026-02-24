@@ -14,10 +14,20 @@ import {
     FaCheck,
     FaChevronRight,
     FaCamera,
-    FaUser
+    FaUser,
+    FaToolbox,
+    FaBoxOpen
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { uploadImage } from '../services/imagekit';
+
+interface PartialInventoryItem {
+    id: string;
+    nama: string;
+    jumlah: number;
+    kondisi: string;
+    orang?: string;
+}
 
 interface Technician {
     id: string;
@@ -37,6 +47,11 @@ const TechnicianManagement = () => {
     const [editTech, setEditTech] = useState<Technician | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+    // Assets State
+    const [viewTechAssets, setViewTechAssets] = useState<Technician | null>(null);
+    const [techAssets, setTechAssets] = useState<PartialInventoryItem[]>([]);
+    const [loadingAssets, setLoadingAssets] = useState(false);
 
     useEffect(() => {
         fetchTechnicians();
@@ -197,6 +212,55 @@ const TechnicianManagement = () => {
         setIsEditModalOpen(true);
     };
 
+    const handleViewAssets = async (tech: Technician) => {
+        setViewTechAssets(tech);
+        setLoadingAssets(true);
+        try {
+            const { data, error } = await supabase
+                .from('inventaris_orang')
+                .select('id, nama, jumlah, kondisi, orang, technician_id')
+                .eq('technician_id', tech.id)
+                .order('nama', { ascending: true });
+
+            if (error) throw error;
+            setTechAssets(data as PartialInventoryItem[] || []);
+        } catch (error: any) {
+            Swal.fire('Error', 'Gagal memuat aset teknisi: ' + error.message, 'error');
+        } finally {
+            setLoadingAssets(false);
+        }
+    };
+
+    const handleRevokeAsset = async (assetId: string, assetName: string) => {
+        const result = await Swal.fire({
+            title: 'Tarik Aset?',
+            text: `Anda akan menarik ${assetName} dari teknisi ini. Barang akan kembali ke status unassigned.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b', // amber
+            cancelButtonColor: '#1e293b',
+            confirmButtonText: 'Ya, Tarik Aset',
+            cancelButtonText: 'Batal',
+            customClass: { popup: 'rounded-[1.5rem]' }
+        });
+
+        if (result.isConfirmed) {
+            try {
+                const { error } = await supabase
+                    .from('inventaris_orang')
+                    .update({ technician_id: null })
+                    .eq('id', assetId);
+
+                if (error) throw error;
+
+                setTechAssets(prev => prev.filter(a => a.id !== assetId));
+                Swal.fire('Berhasil!', 'Aset telah dilepas dari teknisi.', 'success');
+            } catch (error: any) {
+                Swal.fire('Gagal', error.message, 'error');
+            }
+        }
+    };
+
     const filteredTechs = technicians.filter(t =>
         t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.whatsapp_number.includes(searchTerm)
@@ -333,20 +397,29 @@ const TechnicianManagement = () => {
                                     </div>
 
                                     <div className="space-y-4">
-                                        <a
-                                            href={`https://wa.me/${tech.whatsapp_number}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="flex items-center justify-between p-5 bg-slate-50 rounded-[1.25rem] hover:bg-green-50 group/wa transition-all border border-transparent hover:border-green-100 shadow-sm"
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                                                    <FaWhatsapp className="text-xl text-green-500" />
+                                        <div className="flex gap-3">
+                                            <a
+                                                href={`https://wa.me/${tech.whatsapp_number}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex-1 flex items-center justify-center p-4 bg-slate-50 rounded-[1.25rem] hover:bg-green-50 group/wa transition-all border border-transparent hover:border-green-100 shadow-sm"
+                                                title="Hubungi via WhatsApp"
+                                            >
+                                                <FaWhatsapp className="text-2xl text-green-500 group-hover/wa:scale-110 transition-transform" />
+                                            </a>
+                                            <button
+                                                onClick={() => handleViewAssets(tech)}
+                                                className="flex-[3] flex items-center justify-between p-4 bg-slate-50 text-slate-700 rounded-[1.25rem] hover:bg-sgd-50 group/asset transition-all border border-transparent hover:border-sgd-100 shadow-sm font-bold"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm text-sgd-500">
+                                                        <FaToolbox />
+                                                    </div>
+                                                    <span>Aset di Tangan</span>
                                                 </div>
-                                                <span className="text-base font-black text-slate-700 letter tracking-tight">{tech.whatsapp_number}</span>
-                                            </div>
-                                            <FaChevronRight className="text-green-300 opacity-0 group-hover/wa:opacity-100 transition-all translate-x-[-10px] group-hover/wa:translate-x-0" />
-                                        </a>
+                                                <FaChevronRight className="text-sgd-300 opacity-0 group-hover/asset:opacity-100 transition-all -translate-x-2 group-hover/asset:translate-x-0" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -483,15 +556,15 @@ const TechnicianManagement = () => {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleUpdateTechnician} className="p-10 space-y-8">
+                            <form onSubmit={handleUpdateTechnician} className="p-6 sm:p-8 space-y-5">
                                 {/* Photo Upload Update */}
-                                <div className="flex flex-col items-center gap-4 py-4">
+                                <div className="flex flex-col items-center gap-4 py-2">
                                     <div className="relative group">
-                                        <div className="w-32 h-32 rounded-[2rem] bg-slate-50 border-4 border-slate-100 overflow-hidden flex items-center justify-center shadow-inner">
+                                        <div className="w-28 h-28 rounded-[2rem] bg-slate-50 border-4 border-slate-100 overflow-hidden flex items-center justify-center shadow-inner">
                                             {editTech.avatar_url ? (
                                                 <img src={editTech.avatar_url} alt="Preview" className="w-full h-full object-cover" />
                                             ) : (
-                                                <FaUser size={48} className="text-slate-200" />
+                                                <FaUser size={40} className="text-slate-200" />
                                             )}
                                             {uploadingPhoto && (
                                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm">
@@ -499,12 +572,12 @@ const TechnicianManagement = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <label className="absolute bottom-[-10px] right-[-10px] w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center cursor-pointer shadow-xl hover:scale-110 active:scale-95 transition-all">
-                                            <FaCamera size={20} />
+                                        <label className="absolute bottom-[-5px] right-[-5px] w-10 h-10 bg-amber-500 text-white rounded-2xl flex items-center justify-center cursor-pointer shadow-xl hover:scale-110 active:scale-95 transition-all">
+                                            <FaCamera size={16} />
                                             <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, true)} />
                                         </label>
                                     </div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Update Foto Profil</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Update Foto Profil</p>
                                 </div>
 
                                 <div className="space-y-3">
@@ -512,7 +585,7 @@ const TechnicianManagement = () => {
                                     <input
                                         type="text"
                                         required
-                                        className="w-full px-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] focus:border-amber-500 focus:bg-white outline-none transition-all font-bold text-slate-800 text-lg shadow-inner"
+                                        className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500 focus:bg-white outline-none transition-all font-bold text-slate-800 text-base shadow-inner"
                                         value={editTech.name}
                                         onChange={(e) => setEditTech({ ...editTech, name: e.target.value })}
                                     />
@@ -521,31 +594,31 @@ const TechnicianManagement = () => {
                                 <div className="space-y-3">
                                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none ml-1">Nomor WhatsApp</label>
                                     <div className="relative">
-                                        <div className="absolute left-6 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                                            <FaWhatsapp className="text-xl text-green-500" />
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                                            <FaWhatsapp className="text-lg text-green-500" />
                                         </div>
                                         <input
                                             type="text"
                                             required
-                                            className="w-full pl-20 pr-8 py-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] focus:border-amber-500 focus:bg-white outline-none transition-all font-extrabold text-slate-800 text-lg shadow-inner"
+                                            className="w-full pl-16 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-amber-500 focus:bg-white outline-none transition-all font-extrabold text-slate-800 text-base shadow-inner"
                                             value={editTech.whatsapp_number}
                                             onChange={(e) => setEditTech({ ...editTech, whatsapp_number: e.target.value })}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4">
+                                <div className="flex gap-4 pt-4">
                                     <button
                                         type="button"
                                         onClick={() => setIsEditModalOpen(false)}
-                                        className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-[1.5rem] font-black text-lg hover:bg-slate-200 transition-all active:scale-95"
+                                        className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-base hover:bg-slate-200 transition-all active:scale-95"
                                     >
                                         Batal
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="flex-[2] py-5 bg-amber-500 text-white rounded-[1.5rem] font-black text-xl shadow-2xl shadow-amber-200 hover:shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                        className="flex-[2] py-4 bg-amber-500 text-white rounded-2xl font-black text-lg shadow-2xl shadow-amber-200 hover:shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                     >
                                         {isSubmitting ? (
                                             <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -555,6 +628,79 @@ const TechnicianManagement = () => {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL: VIEW ASSETS ON HAND */}
+                {viewTechAssets && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-5 flex justify-between items-center text-white shrink-0">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md">
+                                        <FaToolbox className="text-sgd-300 text-2xl" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-xl tracking-tight leading-none">Aset di Tangan</h3>
+                                        <p className="text-slate-400 text-xs mt-1 font-medium">Barang yang ditugaskan ke: <span className="text-sgd-300">{viewTechAssets.name}</span></p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setViewTechAssets(null)} className="p-2.5 bg-white/10 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-all text-slate-300">
+                                    <FaTimes className="text-xl" />
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar">
+                                {loadingAssets ? (
+                                    <div className="py-20 text-center flex flex-col items-center">
+                                        <div className="w-8 h-8 border-4 border-sgd-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Memuat Data Aset...</p>
+                                    </div>
+                                ) : techAssets.length === 0 ? (
+                                    <div className="py-16 text-center">
+                                        <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100">
+                                            <FaBoxOpen className="text-slate-200 text-5xl" />
+                                        </div>
+                                        <h4 className="text-xl font-black text-slate-700">Tidak Ada Aset</h4>
+                                        <p className="text-slate-400 mt-2 font-medium">Teknisi ini belum memegang aset apapun.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {techAssets.map(asset => (
+                                            <div key={asset.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                                                        <FaToolbox className="text-slate-300 text-2xl" />
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="font-bold text-slate-900 text-base">{asset.nama}</h5>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">Jumlah: {asset.jumlah}</span>
+                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${asset.kondisi === 'Bagus' || asset.kondisi === 'Baik'
+                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                    : 'bg-red-100 text-red-700'
+                                                                } capitalize`}>
+                                                                {asset.kondisi}
+                                                            </span>
+                                                        </div>
+                                                        {asset.orang && <p className="text-xs text-slate-400 mt-0.5">Pemilik: {asset.orang}</p>}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRevokeAsset(asset.id, asset.nama)}
+                                                    className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-red-50 text-red-500 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 border border-red-100 hover:border-red-300 active:scale-95 group/btn"
+                                                >
+                                                    <span className="hidden sm:inline">Lepas Aset</span>
+                                                    <FaBoxOpen className="text-lg group-hover/btn:-translate-y-1 transition-transform" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

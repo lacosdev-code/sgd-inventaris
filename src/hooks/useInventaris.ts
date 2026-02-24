@@ -11,6 +11,8 @@ export interface InventarisItem {
   lokasi: string;
   kode_alat: string;
   foto_url?: string;
+  assigned_to?: string;
+  technicians?: { name: string } | null;
 }
 
 export const useInventaris = () => {
@@ -23,7 +25,10 @@ export const useInventaris = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('inventaris_utama')
-        .select('*')
+        .select(`
+          *,
+          technicians ( name )
+        `)
         .order('id', { ascending: true });
 
       if (error) throw error;

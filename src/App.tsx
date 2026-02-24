@@ -3,12 +3,13 @@ import { HashRouter as Router, Routes, Route, NavLink, Navigate } from 'react-ro
 import { supabase, seedDatabase } from './services/supabase';
 import {
   FiGrid, FiBox, FiUsers, FiRepeat, FiClock,
-  FiLogOut, FiMenu, FiX, FiTool, FiPieChart
+  FiLogOut, FiMenu, FiX, FiTool, FiPieChart, FiPackage
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import TechDashboard from './pages/TechDashboard';
 import InventarisUtama from './pages/InventarisUtama';
 import InventarisOrang from './pages/InventarisOrang';
 import Peminjaman from './pages/Peminjaman';
@@ -17,6 +18,7 @@ import DetailAlat from './pages/DetailAlat';
 import Laporan from './pages/Laporan';
 import KondisiAlat from './pages/KondisiAlat';
 import TechnicianManagement from './pages/TechnicianManagement';
+import BarangMasuk from './pages/BarangMasuk';
 
 // --- SIDEBAR COMPONENT ---
 const Sidebar = ({ isOpen, setIsOpen, navLinks, onLogout }: {
@@ -167,6 +169,7 @@ const AppContent = () => {
     { path: '/laporan', name: 'Laporan', icon: <FiPieChart />, roles: ['admin'] },
     { path: '/teknisi', name: 'Manajemen Teknisi', icon: <FiUsers />, roles: ['admin'] },
     { path: '/kondisi', name: 'Kondisi Alat', icon: <FiTool />, roles: ['admin'] },
+    { path: '/barang-masuk', name: 'Barang Masuk', icon: <FiPackage />, roles: ['admin'] },
     { path: '/log', name: 'Log Aktivitas', icon: <FiClock />, roles: ['admin'] },
   ];
 
@@ -219,7 +222,7 @@ const AppContent = () => {
         {/* Main Content - Mobile-First Responsive Padding */}
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 p-4 md:p-6 lg:p-8">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={isAdmin ? <Dashboard /> : <TechDashboard techUser={techUser} />} />
             <Route path="/utama" element={<InventarisUtama />} />
             <Route path="/orang" element={<InventarisOrang />} />
             <Route path="/peminjaman" element={<Peminjaman />} />
@@ -227,6 +230,7 @@ const AppContent = () => {
             <Route path="/log" element={<ActivityLog />} />
             <Route path="/kondisi" element={<KondisiAlat />} />
             <Route path="/teknisi" element={<TechnicianManagement />} />
+            <Route path="/barang-masuk" element={<BarangMasuk />} />
             <Route path="/detail/:id" element={<DetailAlat />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

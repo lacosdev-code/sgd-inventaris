@@ -7,9 +7,7 @@ import {
   FaHistory,
   FaClock,
   FaCheckCircle,
-  FaExclamationCircle,
   FaPlus,
-  FaImage,
   FaSearch,
   FaBoxOpen,
   FaMapMarkerAlt,
@@ -24,7 +22,8 @@ const Peminjaman = () => {
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [catalogSearch, setCatalogSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'loan'>('all');
 
   useEffect(() => {
     fetchData();
@@ -40,10 +39,10 @@ const Peminjaman = () => {
         .eq('status', 'dipinjam')
         .order('tgl_pinjam', { ascending: false });
 
-      // Ambil semua barang yang aktif (tidak terhapus) untuk Katalog & Dropdown Peminjaman
+      // Ambil semua barang yang aktif (tidak terhapus)
       const { data: items } = await supabase
         .from('inventaris_utama')
-        .select('id, nama, kode_alat, jumlah_tersedia, lokasi, kondisi')
+        .select('id, nama, kode_alat, jumlah_tersedia, lokasi, kondisi, foto_url')
         .eq('is_deleted', false)
         .order('nama', { ascending: true });
 
@@ -58,16 +57,18 @@ const Peminjaman = () => {
     }
   };
 
-  const handlePinjamModal = async () => {
+  const handlePinjamModal = async (preselectedItem?: any) => {
     const itemsToBorrow = availableItems.filter(i => i.jumlah_tersedia > 0);
-    const itemOptions = itemsToBorrow.map(item =>
-      `<option value="${item.id}">${item.nama} ${item.lokasi ? `📍 ${item.lokasi}` : ''} (Sisa: ${item.jumlah_tersedia})</option>`
-    ).join('');
 
-    if (itemsToBorrow.length === 0) {
+    // If no preselected item and no items available at all
+    if (!preselectedItem && itemsToBorrow.length === 0) {
       Swal.fire('Stok Kosong', 'Tidak ada barang yang tersedia untuk dipinjam saat ini.', 'warning');
       return;
     }
+
+    const itemOptions = itemsToBorrow.map(item =>
+      `<option value="${item.id}" ${preselectedItem?.id === item.id ? 'selected' : ''}>${item.nama} ${item.lokasi ? `📍 ${item.lokasi}` : ''} (Sisa: ${item.jumlah_tersedia})</option>`
+    ).join('');
 
     await Swal.fire({
       title: '<span class="text-[#013220] font-bold uppercase tracking-tight">Form Peminjaman Alat</span>',
@@ -107,7 +108,7 @@ const Peminjaman = () => {
             </select>
           </div>
           <div class="space-y-1">
-            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto Bukti Pinjam</label>
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto Bukti Pinjam (Opsional)</label>
             <input type="file" id="sw-foto" accept="image/*" class="swal2-file w-full m-0 mt-1 border-2 border-slate-100 rounded-xl">
           </div>
           <div class="space-y-1">
@@ -242,7 +243,7 @@ const Peminjaman = () => {
             </select>
           </div>
           <div class="space-y-2">
-            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Bukti Pengembalian</label>
+            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Bukti Pengembalian (Opsional)</label>
             <input type="file" id="sw-foto-kembali" accept="image/*" class="swal2-file w-full m-0 mt-1">
           </div>
           <div class="space-y-2">
@@ -321,197 +322,170 @@ const Peminjaman = () => {
     });
   };
 
-  const filteredCatalog = availableItems.filter(item =>
-    item.nama.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-    (item.kode_alat && item.kode_alat.toLowerCase().includes(catalogSearch.toLowerCase()))
-  );
+  // Combine data for unified view
+  const combinedData = [
+    ...availableItems.map(item => ({ ...item, viewType: 'available' as const })),
+    ...activeLoans.map(loan => ({ ...loan, viewType: 'loan' as const }))
+  ].filter(item => {
+    const text = (item.nama || item.barang_nama || '').toLowerCase();
+    const code = (item.kode_alat || '').toLowerCase();
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = text.includes(search) || code.includes(search);
+
+    if (filterStatus === 'available') return matchesSearch && item.viewType === 'available';
+    if (filterStatus === 'loan') return matchesSearch && item.viewType === 'loan';
+    return matchesSearch;
+  });
 
   return (
-    <div className="space-y-10 animate-fade-in pb-20">
+    <div className="space-y-6 md:space-y-10 animate-fade-in pb-20">
 
-      {/* Modern Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-8 md:p-12 rounded-[2.5rem] shadow-modern-lg border border-gray-100/50">
+      {/* Modern Unified Header */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50/50 to-white p-6 md:p-12 rounded-[2rem] md:rounded-[2.5rem] shadow-modern-lg border border-gray-100/50">
         <div className="absolute top-0 right-0 w-80 h-80 bg-gold-gradient rounded-full blur-[100px] opacity-10 -mr-40 -mt-40"></div>
         <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="flex items-center gap-5">
-            <div className="p-4 bg-gold-gradient rounded-2xl shadow-xl ring-4 ring-sgd-500/10">
-              <FaExchangeAlt className="text-white text-2xl" />
+          <div className="flex items-center gap-4 md:gap-5">
+            <div className="p-3 md:p-4 bg-gold-gradient rounded-2xl shadow-xl ring-4 ring-sgd-500/10">
+              <FaExchangeAlt className="text-white text-xl md:text-2xl" />
             </div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-none mb-2">Portal Peminjaman</h1>
-              <p className="text-slate-500 font-bold text-sm tracking-wide">PENGELOLAAN ALAT & ASET LAPANGAN</p>
+              <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight leading-none mb-1 md:mb-2 text-wrap">Peminjaman & Pengembalian</h1>
+              <p className="text-slate-500 font-bold text-[10px] md:text-sm tracking-wide">PENGELOLAAN ALAT & ASET LAPANGAN KONTINU</p>
             </div>
           </div>
           <button
-            onClick={handlePinjamModal}
-            className="w-full md:w-auto overflow-hidden bg-slate-900 text-white px-10 py-5 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl hover:bg-slate-800 transition-all active:scale-95 group"
+            onClick={() => handlePinjamModal()}
+            className="w-full md:w-auto overflow-hidden bg-slate-900 text-white px-8 md:px-10 py-4 md:py-5 rounded-2xl font-black flex items-center justify-center gap-3 shadow-2xl hover:bg-slate-800 transition-all active:scale-95 group text-sm md:text-base"
           >
             <FaPlus className="text-sgd-400 group-hover:rotate-90 transition-transform duration-300" />
-            Input Pinjaman Baru
+            Pinjaman Baru
           </button>
         </div>
       </div>
 
-      {/* Active Loans Table */}
-      <div className="bg-white rounded-[2.5rem] shadow-modern-lg border border-slate-100 overflow-hidden">
-        <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/30">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-sgd-100 rounded-xl text-sgd-700 shadow-inner">
-              <FaHistory />
-            </div>
-            <div>
-              <h3 className="font-black text-slate-900 text-xl tracking-tight">Pinjaman Aktif Anda</h3>
-              <p className="text-xs text-slate-400 font-bold flex items-center gap-1 uppercase tracking-widest mt-1">
-                <FaClock className="text-sgd-500" /> Sedang Dipinjam: {activeLoans.length} Alat
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto px-2 pb-2">
-          {loading ? (
-            <div className="py-20 text-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-sgd-500 border-t-transparent mx-auto mb-4"></div><p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">SINKRONISASI DATA...</p></div>
-          ) : activeLoans.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaCheckCircle className="text-green-500 text-3xl" />
-              </div>
-              <p className="font-black text-slate-800 text-lg uppercase tracking-tight">Status Aman</p>
-              <p className="text-slate-400 font-medium text-sm">Anda tidak memiliki alat yang perlu dikembalikan.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
-                  <th className="px-6 py-5">Item Informasi</th>
-                  <th className="px-6 py-5">Tgl Pinjam</th>
-                  <th className="px-6 py-5 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {activeLoans.map((loan) => (
-                  <tr key={loan.id} className="group hover:bg-slate-50/50 transition-all duration-300">
-                    <td className="px-6 py-6">
-                      <div className="flex items-center gap-4">
-                        {loan.foto_bukti_url ? (
-                          <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm shrink-0">
-                            <img src={loan.foto_bukti_url} alt="Tool" className="w-full h-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="underline w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300 shrink-0">
-                            <FaImage size={20} />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{loan.barang_nama}</p>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Peminjam: {loan.peminjam}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-6">
-                      <p className="text-slate-700 font-black text-sm">{format(new Date(loan.tgl_pinjam), 'dd/MM/yy')}</p>
-                      <p className="text-[10px] items-center gap-1 font-bold text-red-500 mt-1 flex">
-                        <FaClock size={8} /> JML: {loan.tgl_kembali_rencana ? format(new Date(loan.tgl_kembali_rencana), 'dd/MM') : '-'}
-                      </p>
-                    </td>
-                    <td className="px-6 py-6 text-center">
-                      <button
-                        onClick={() => handleReturn(loan)}
-                        className="bg-sgd-100 text-sgd-700 px-6 py-3 rounded-xl text-xs font-black shadow-inner hover:bg-sgd-600 hover:text-white transition-all transform hover:-translate-y-1"
-                      >
-                        KEMBALIKAN
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Available Catalog (Master Aset for Techs) */}
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 md:px-0">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-sgd-900 rounded-2xl shadow-xl">
-              <FaBoxOpen className="text-sgd-400 text-xl" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">Katalog Alat Tersedia</h2>
-              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mt-1">Daftar Inventaris Utama</p>
-            </div>
-          </div>
-
-          <div className="relative group flex-1 md:max-w-md">
+      {/* Unified Search and Control Bar */}
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-modern-lg border border-slate-100 space-y-6">
+        <div className="flex flex-col xl:flex-row gap-6 items-stretch xl:items-center justify-between">
+          <div className="relative group flex-1">
             <FaSearch className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-sgd-500 transition-colors" />
             <input
               type="text"
-              placeholder="Cari nama atau kode alat..."
-              className="w-full pl-16 pr-6 py-5 bg-white border-2 border-transparent rounded-[1.5rem] shadow-xl shadow-slate-200/50 outline-none focus:border-sgd-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
-              value={catalogSearch}
-              onChange={(e) => setCatalogSearch(e.target.value)}
+              placeholder="Cari alat atau kode..."
+              className="w-full pl-16 pr-6 py-4 md:py-5 bg-slate-50 border-2 border-transparent rounded-2xl md:rounded-[1.5rem] outline-none focus:border-sgd-500 focus:bg-white transition-all font-bold text-slate-700 placeholder:text-slate-300 shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-        </div>
 
-        {loading ? (
-          <div className="py-20 text-center text-slate-300 font-black tracking-[0.3em] text-xs">LOADING CATALOG...</div>
-        ) : filteredCatalog.length === 0 ? (
-          <div className="bg-white rounded-[2.5rem] p-16 text-center border-2 border-dashed border-slate-100">
-            <FaSearch size={40} className="text-slate-100 mx-auto mb-4" />
-            <p className="text-slate-400 font-black uppercase tracking-widest text-sm text-center">Data alat tidak ditemukan</p>
+          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl gap-1 overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => setFilterStatus('all')}
+              className={`px-6 py-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${filterStatus === 'all' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              SEMUA ({availableItems.length + activeLoans.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus('available')}
+              className={`px-6 py-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${filterStatus === 'available' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'text-slate-400 hover:text-emerald-500'}`}
+            >
+              TERSEDIA ({availableItems.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus('loan')}
+              className={`px-6 py-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${filterStatus === 'loan' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30' : 'text-slate-400 hover:text-orange-500'}`}
+            >
+              SEDANG DIPINJAM ({activeLoans.length})
+            </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCatalog.map(item => (
-              <div key={item.id} className="group bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between overflow-hidden relative">
-                {/* Decor Background */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-sgd-50 opacity-0 group-hover:opacity-100 rounded-bl-[4rem] transition-all -z-0"></div>
+        </div>
+      </div>
 
-                <div className="relative z-10 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className={`p-4 rounded-2xl ${item.jumlah_tersedia > 0 ? 'bg-sgd-50 text-sgd-600 shadow-inner' : 'bg-red-50 text-red-400 opacity-50'}`}>
-                      <FaBarcode size={24} />
-                    </div>
-                    <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ${item.jumlah_tersedia > 0 ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>
-                      {item.jumlah_tersedia > 0 ? 'READY STOK' : 'STOK KOSONG'}
-                    </div>
+      {/* Unified Results Grid */}
+      {loading ? (
+        <div className="py-20 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-sgd-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest animate-pulse">Sinkronisasi Aset...</p>
+        </div>
+      ) : combinedData.length === 0 ? (
+        <div className="bg-white rounded-[2.5rem] p-16 md:p-24 text-center border-2 border-dashed border-slate-100 shadow-inner">
+          <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FaBoxOpen size={48} className="text-slate-100" />
+          </div>
+          <p className="text-slate-400 font-black uppercase tracking-widest text-sm md:text-lg">Tidak ada alat yang ditemukan</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
+          {combinedData.map((item, idx) => (
+            <div
+              key={item.id || idx}
+              className={`group bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between overflow-hidden relative ${item.viewType === 'loan' ? 'ring-2 ring-orange-500/20' : ''}`}
+            >
+              {/* Status Badge Top Right */}
+              <div className="absolute top-6 right-6 z-20">
+                <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm border ${item.viewType === 'available'
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                  : 'bg-orange-50 text-orange-600 border-orange-100'
+                  }`}>
+                  {item.viewType === 'available' ? 'Siap Pinjam' : 'Sedang Dipakai'}
+                </span>
+              </div>
+
+              <div className="relative z-10 flex flex-col h-full">
+                <div className="flex items-start gap-5 mb-6">
+                  <div className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-slate-100 ${item.viewType === 'available' ? 'bg-slate-50' : 'bg-orange-50'}`}>
+                    {(item.foto_url || item.foto_bukti_url) ? (
+                      <img src={item.foto_url || item.foto_bukti_url} alt="Aset" className="w-full h-full object-cover" />
+                    ) : (
+                      <FaBarcode size={24} className={item.viewType === 'available' ? 'text-slate-300' : 'text-orange-300'} />
+                    )}
                   </div>
-
-                  <div className="mb-6 flex-1">
-                    <h4 className="text-xl font-black text-slate-900 group-hover:text-sgd-700 transition-colors uppercase tracking-tight line-clamp-2">{item.nama}</h4>
-                    <p className="text-[10px] font-black text-slate-400 mt-2 tracking-widest uppercase">KODE: {item.kode_alat || 'NO-CODE'}</p>
+                  <div className="min-w-0 flex-1 pr-12">
+                    <h4 className="text-lg md:text-xl font-black text-slate-900 group-hover:text-sgd-700 transition-colors uppercase tracking-tight line-clamp-2 leading-snug">{item.nama || item.barang_nama}</h4>
+                    <p className="text-[10px] font-black text-slate-400 mt-2 tracking-widest uppercase truncate">KODE: {item.kode_alat || 'NO-CODE'}</p>
                   </div>
+                </div>
 
-                  <div className="space-y-4 pt-6 border-t border-slate-50">
-                    <div className="flex items-center justify-between">
+                <div className="space-y-4 pt-6 border-t border-slate-50 mt-auto">
+                  {item.viewType === 'available' ? (
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <FaMapMarkerAlt className="text-slate-300" />
                         <span className="text-xs font-bold text-slate-500">{item.lokasi || 'Lokasi tidak diset'}</span>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">STOK</p>
-                        <p className={`text-2xl font-black ${item.jumlah_tersedia > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{item.jumlah_tersedia}</p>
+                        <p className="text-2xl font-black text-slate-900">{item.jumlah_tersedia}</p>
                       </div>
                     </div>
+                  ) : (
+                    <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-100 mb-4">
+                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1.5 leading-none">Peminjam Aktif</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.peminjam}</p>
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-orange-600">
+                          <FaClock size={10} />
+                          {item.tgl_pinjam ? format(new Date(item.tgl_pinjam), 'dd/MM/yy') : '-'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                    {item.jumlah_tersedia > 0 && (
-                      <button
-                        onClick={handlePinjamModal}
-                        className="w-full flex items-center justify-between p-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-sgd-600 transition-all shadow-xl shadow-slate-200 group-hover:shadow-sgd-400/20"
-                      >
-                        <span className="text-xs uppercase tracking-widest">Pinjam Alat</span>
-                        <FaChevronRight size={10} className="text-sgd-400 group-hover:translate-x-1 transition-transform" />
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => item.viewType === 'available' ? handlePinjamModal(item) : handleReturn(item)}
+                    className={`w-full flex items-center justify-between p-4 md:p-5 rounded-2xl font-black transition-all shadow-xl active:scale-95 group/btn ${item.viewType === 'available'
+                      ? 'bg-slate-900 text-white hover:bg-emerald-600 shadow-slate-200 hover:shadow-emerald-500/20'
+                      : 'bg-orange-500 text-white hover:bg-orange-600 shadow-orange-500/20'
+                      }`}
+                  >
+                    <span className="text-xs uppercase tracking-widest">{item.viewType === 'available' ? 'PINJAM ALAT' : 'KEMBALIKAN ALAT'}</span>
+                    <FaChevronRight size={10} className="group-hover/btn:translate-x-1 transition-transform" />
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

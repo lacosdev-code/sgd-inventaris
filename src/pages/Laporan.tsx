@@ -1,80 +1,64 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { FaFilePdf, FaFileExcel, FaCalendarAlt, FaDownload, FaChartPie, FaClipboardList, FaUsers, FaBoxOpen, FaCheckCircle } from 'react-icons/fa';
+import { FiX } from 'react-icons/fi';
+import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import {
-    FaFilePdf, FaFileExcel, FaChartBar, FaCalendarAlt,
-    FaBox, FaExchangeAlt, FaTools, FaSearch
-} from 'react-icons/fa';
-import { FiX } from 'react-icons/fi';
+
+const reportTypes = [
+    {
+        id: 'status_aset',
+        title: 'Status Aset Terkini',
+        icon: <FaBoxOpen className="text-sgd-500" />,
+        desc: 'Daftar lengkap inventaris fisik, jumlah, lokasi, dan siapa yang memegang alat tersebut. Berguna untuk audit bulanan.',
+        color: 'bg-sgd-50 border-sgd-200 hover:border-sgd-500'
+    },
+    {
+        id: 'riwayat_pinjam',
+        title: 'Riwayat Peminjaman',
+        icon: <FaClipboardList className="text-amber-500" />,
+        desc: 'Log semua alat yang dipinjam, status pengembalian, dan riwayat terlambat. Filter berdasarkan tanggal penting.',
+        color: 'bg-amber-50 border-amber-200 hover:border-amber-500'
+    },
+    {
+        id: 'kondisi_servis',
+        title: 'Kondisi & Maintenance',
+        icon: <FaChartPie className="text-blue-500" />,
+        desc: 'Fokus pada alat-alat yang rusak, perlu perbaikan, atau jadwal servis rutinnya sudah mendekati / lewat.',
+        color: 'bg-blue-50 border-blue-200 hover:border-blue-500'
+    },
+    {
+        id: 'aset_personel',
+        title: 'Pertanggungjawaban Teknisi',
+        icon: <FaUsers className="text-purple-500" />,
+        desc: 'Daftar semua alat operasional yang saat ini sedang dipegang oleh teknisi secara khusus per-orang.',
+        color: 'bg-purple-50 border-purple-200 hover:border-purple-500'
+    }
+];
 
 const Laporan = () => {
-    const [activeTab, setActiveTab] = useState('stok'); // stok, peminjaman, maintenance
-    const [inventory, setInventory] = useState<any[]>([]);
-    const [loans, setLoans] = useState<any[]>([]);
-    const [maintenanceItems, setMaintenanceItems] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    // State for PDF Preview
-    const [showPdfPreview, setShowPdfPreview] = useState(false);
-    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-
-    // Date Filter
+    const [selectedReport, setSelectedReport] = useState(reportTypes[0].id);
     const [startDate, setStartDate] = useState(
         new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
     );
     const [endDate, setEndDate] = useState(
         new Date().toISOString().split('T')[0]
     );
+    const [isGenerating, setIsGenerating] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, [activeTab, startDate, endDate]);
+    // Preview states
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            if (activeTab === 'stok') {
-                const { data, error } = await supabase.from('inventaris_utama').select('*');
-                if (error) throw error;
-                setInventory(data || []);
-            }
-            else if (activeTab === 'peminjaman') {
-                const { data, error } = await supabase
-                    .from('peminjaman')
-                    .select('*')
-                    .gte('tanggal_pinjam', startDate)
-                    .lte('tanggal_pinjam', endDate)
-                    .order('tanggal_pinjam', { ascending: false });
-                if (error) throw error;
-                setLoans(data || []);
-            }
-            else if (activeTab === 'maintenance') {
-                const { data, error } = await supabase
-                    .from('inventaris_utama')
-                    .select('*')
-                    .not('jadwal_servis_berikutnya', 'is', null)
-                    .order('jadwal_servis_berikutnya', { ascending: true });
-                if (error) throw error;
+    // Helpers
+    const formatDate = (date: Date) => format(date, 'dd MMM yyyy', { locale: idLocale });
 
-                // Filter items that actually have maintenance dates
-                setMaintenanceItems(data || []);
-            }
-        } catch (error) {
-            console.error("Error fetching report data:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // --- EXPORT FUNCTIONS ---
-
-    // Helper to load image for PDF
     const loadImage = (url: string): Promise<string> => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = 'Anonymous';
             img.src = url;
@@ -87,21 +71,117 @@ const Laporan = () => {
                     ctx.drawImage(img, 0, 0);
                     resolve(canvas.toDataURL('image/png'));
                 } else {
-                    resolve(''); // Fallback if canvas fails
+                    resolve('');
                 }
             };
-            img.onerror = () => resolve(''); // Fallback if load fails
+            img.onerror = () => resolve('');
         });
     };
 
-    const generatePDF = async () => {
-        const doc = new jsPDF();
-        const title = activeTab === 'stok' ? 'LAPORAN STOK ASET' :
-            activeTab === 'peminjaman' ? 'LAPORAN PEMINJAMAN' : 'JADWAL MAINTENANCE';
-
-        // --- HEADER WITH LOGO ---
+    const handleGenerateExcel = async () => {
+        setIsGenerating(true);
         try {
-            const logoUrl = "https://ik.imagekit.io/Sgd/Logo%20Potrait.png?tr=w-200"; // Responsive resize
+            let data: any[] = [];
+            let worksheetName = "Laporan";
+
+            if (selectedReport === 'status_aset') {
+                const { data: dbData, error } = await supabase.from('inventaris_utama').select('*, technicians(name)').order('nama');
+                if (error) throw error;
+
+                data = dbData.map(item => ({
+                    'Kode Alat': item.kode_alat,
+                    'Nama Barang': item.nama,
+                    'Total Fisik': item.jumlah,
+                    'Sisa Gudang': item.jumlah_tersedia,
+                    'Kondisi': item.kondisi.toUpperCase(),
+                    'Lokasi': item.lokasi,
+                    'PIC / Teknisi': item.technicians ? item.technicians.name : '-'
+                }));
+                worksheetName = "Status Aset Terkini";
+            }
+
+            else if (selectedReport === 'riwayat_pinjam') {
+                let query = supabase.from('peminjaman').select('*, inventaris_utama(nama, kode_alat)').order('tgl_pinjam', { ascending: false });
+                if (startDate) query = query.gte('tgl_pinjam', startDate);
+                if (endDate) query = query.lte('tgl_pinjam', endDate);
+
+                const { data: dbData, error } = await query;
+                if (error) throw error;
+
+                data = dbData.map(item => ({
+                    'ID Pinjam': item.id,
+                    'Tgl Pinjam': item.tgl_pinjam,
+                    'Peminjam': item.peminjam,
+                    'Serah Terima': item.teknisi_pinjam || '-',
+                    'Alat': item.barang_nama || item.inventaris_utama?.nama,
+                    'Kode': item.inventaris_utama?.kode_alat,
+                    'Rencana Kembali': item.tgl_kembali_rencana,
+                    'Tgl Kembali Aktual': item.tgl_kembali_aktual || '-',
+                    'Status': item.status.toUpperCase()
+                }));
+                worksheetName = "Riwayat Peminjaman";
+            }
+
+            else if (selectedReport === 'kondisi_servis') {
+                const today = new Date().toISOString().split('T')[0];
+                const nextMonth = new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
+
+                const { data: dbData, error } = await supabase.from('inventaris_utama')
+                    .select('*')
+                    .or(`kondisi.ilike.%rusak%,kondisi.ilike.%perbaikan%,jadwal_servis_berikutnya.lte.${nextMonth}`)
+                    .order('nama');
+
+                if (error) throw error;
+
+                data = dbData.map(item => ({
+                    'Kode Alat': item.kode_alat,
+                    'Nama Barang': item.nama,
+                    'Kondisi': item.kondisi.toUpperCase(),
+                    'Jadwal Servis Berikutnya': item.jadwal_servis_berikutnya || '-',
+                    'Sisa Hari': item.jadwal_servis_berikutnya ? Math.ceil((new Date(item.jadwal_servis_berikutnya).getTime() - new Date().getTime()) / (1000 * 3600 * 24)) : '-',
+                    'PIC / Lokasi': item.lokasi
+                }));
+                worksheetName = "Kondisi dan Servis";
+            }
+
+            else if (selectedReport === 'aset_personel') {
+                const { data: dbData, error } = await supabase.from('inventaris_utama')
+                    .select('*, technicians(name)')
+                    .not('assigned_to', 'is', null)
+                    .order('assigned_to');
+
+                if (error) throw error;
+
+                data = dbData.map(item => ({
+                    'Teknisi Pemegang': item.technicians?.name || '-',
+                    'Kode Alat': item.kode_alat,
+                    'Nama Barang': item.nama,
+                    'Kondisi': item.kondisi.toUpperCase(),
+                    'Lokasi': item.lokasi || '-'
+                }));
+                worksheetName = "Pertanggungjawaban Teknisi";
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, worksheetName);
+            XLSX.writeFile(workbook, `Laporan_${selectedReport}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+
+            Swal.fire('Berhasil', 'Laporan Excel telah diunduh.', 'success');
+        } catch (error: any) {
+            Swal.fire('Gagal Membuat Laporan Excel', error.message, 'error');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const generatePDFDocument = async () => {
+        const doc = new jsPDF();
+        const activeReportInfo = reportTypes.find(r => r.id === selectedReport);
+
+        // Header Logo
+        try {
+            const logoUrl = "https://ik.imagekit.io/Sgd/Logo%20Potrait.png?tr=w-200";
             const logoData = await loadImage(logoUrl);
             if (logoData) {
                 doc.addImage(logoData, 'PNG', 14, 10, 25, 25);
@@ -110,10 +190,10 @@ const Laporan = () => {
             console.warn("Logo failed to load", e);
         }
 
-        // Company Info
+        // Header Text
         doc.setFont("helvetica", "bold");
         doc.setFontSize(18);
-        doc.setTextColor(1, 50, 32); // SGD Green
+        doc.setTextColor(1, 50, 32);
         doc.text('PT. SUNGGIARDI CORPORATION', 45, 18);
 
         doc.setFont("helvetica", "normal");
@@ -128,55 +208,99 @@ const Laporan = () => {
         doc.setDrawColor(1, 50, 32);
         doc.line(14, 38, 196, 38);
 
-        // Report Title & Date
+        // Title
         doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
         doc.setTextColor(0);
-        doc.text(title, 14, 48);
+        doc.text(`LAPORAN: ${activeReportInfo?.title.toUpperCase()}`, 14, 48);
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
         doc.text(`Dicetak: ${format(new Date(), 'dd MMM yyyy HH:mm', { locale: idLocale })}`, 14, 54);
 
-        if (activeTab === 'peminjaman') {
-            doc.text(`Periode: ${format(new Date(startDate), 'dd MMM yyyy')} s/d ${format(new Date(endDate), 'dd MMM yyyy')}`, 14, 60);
+        if (selectedReport === 'riwayat_pinjam') {
+            doc.text(`Periode: ${formatDate(new Date(startDate))} s/d ${formatDate(new Date(endDate))}`, 14, 60);
         }
 
-        // Data Preparation
-        let head = [];
-        let body = [];
+        let startY = selectedReport === 'riwayat_pinjam' ? 65 : 60;
+        let head: string[][] = [];
+        let body: any[][] = [];
 
-        if (activeTab === 'stok') {
-            head = [['No', 'Kode', 'Nama Alat', 'Kategori', 'Lokasi', 'Kondisi', 'Jumlah']];
-            body = inventory.map((item, index) => [
+        // Fetch Data for PDF
+        if (selectedReport === 'status_aset') {
+            const { data, error } = await supabase.from('inventaris_utama').select('*, technicians(name)').order('nama');
+            if (error) throw error;
+
+            head = [['NO', 'KODE ALAT', 'NAMA BARANG', 'STOK', 'TERSEDIA', 'KONDISI', 'LOKASI / PIC']];
+            body = data.map((item, index) => [
                 index + 1,
-                item.kode_alat, item.nama, item.kategori, item.lokasi, item.kondisi,
-                `${item.jumlah_tersedia}/${item.jumlah}`
+                item.kode_alat,
+                item.nama,
+                item.jumlah.toString(),
+                item.jumlah_tersedia.toString(),
+                item.kondisi.toUpperCase(),
+                item.technicians ? item.technicians.name : item.lokasi
             ]);
-        } else if (activeTab === 'peminjaman') {
-            head = [['No', 'Peminjam', 'Alat', 'Tgl Pinjam', 'Tgl Kembali', 'Status']];
-            body = loans.map((loan, index) => [
+        }
+        else if (selectedReport === 'riwayat_pinjam') {
+            let query = supabase.from('peminjaman').select('*, inventaris_utama(nama, kode_alat)').order('tgl_pinjam', { ascending: false });
+            if (startDate) query = query.gte('tgl_pinjam', startDate);
+            if (endDate) query = query.lte('tgl_pinjam', endDate);
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            head = [['NO', 'TGL PINJAM', 'PEMINJAM', 'ALAT', 'STATUS', 'TGL KEMBALI']];
+            body = data.map((item, index) => [
                 index + 1,
-                loan.nama_peminjam, loan.nama_barang,
-                format(new Date(loan.tanggal_pinjam), 'dd/MM/yy'),
-                loan.tanggal_kembali ? format(new Date(loan.tanggal_kembali), 'dd/MM/yy') : '-',
-                loan.status
+                format(new Date(item.tgl_pinjam), 'dd/MM/yy'),
+                item.peminjam,
+                item.barang_nama || item.inventaris_utama?.nama || '-',
+                item.status.toUpperCase(),
+                item.tgl_kembali_aktual ? format(new Date(item.tgl_kembali_aktual), 'dd/MM/yy') : '-'
             ]);
-        } else {
-            head = [['No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
-            body = maintenanceItems.map((item, index) => [
+        }
+        else if (selectedReport === 'kondisi_servis') {
+            const nextMonth = new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
+            const { data, error } = await supabase.from('inventaris_utama')
+                .select('*')
+                .or(`kondisi.ilike.%rusak%,kondisi.ilike.%perbaikan%,jadwal_servis_berikutnya.lte.${nextMonth}`)
+                .order('nama');
+            if (error) throw error;
+
+            head = [['NO', 'KODE', 'NAMA BARANG', 'KONDISI', 'LOKASI', 'JADWAL SERVIS']];
+            body = data.map((item, index) => [
                 index + 1,
-                item.nama, item.lokasi,
-                item.jadwal_servis_berikutnya ? format(new Date(item.jadwal_servis_berikutnya), 'dd MMM yyyy', { locale: idLocale }) : '-',
-                item.kondisi
+                item.kode_alat,
+                item.nama,
+                item.kondisi.toUpperCase(),
+                item.lokasi,
+                item.jadwal_servis_berikutnya ? formatDate(new Date(item.jadwal_servis_berikutnya)) : '-'
+            ]);
+        }
+        else if (selectedReport === 'aset_personel') {
+            const { data, error } = await supabase.from('inventaris_utama')
+                .select('*, technicians(name)')
+                .not('assigned_to', 'is', null)
+                .order('assigned_to');
+            if (error) throw error;
+
+            head = [['NO', 'NAMA TEKNISI', 'KODE ALAT', 'NAMA BARANG', 'KONDISI']];
+            body = data.map((item, index) => [
+                index + 1,
+                item.technicians?.name || '-',
+                item.kode_alat,
+                item.nama,
+                item.kondisi.toUpperCase()
             ]);
         }
 
+        // Draw Table
         autoTable(doc, {
-            startY: activeTab === 'peminjaman' ? 65 : 60,
-            head: head,
-            body: body,
-            theme: 'grid',
+            startY,
+            head,
+            body,
+            theme: 'striped',
             headStyles: {
                 fillColor: [1, 50, 32],
                 textColor: [255, 255, 255],
@@ -185,165 +309,15 @@ const Laporan = () => {
             styles: { fontSize: 9, cellPadding: 3 },
             alternateRowStyles: { fillColor: [245, 250, 245] },
             didParseCell: (data) => {
-                // Color Coding Logic
+                // Formatting specific columns
                 if (data.section === 'body') {
-                    const text = (data.cell.raw as string) || '';
-                    const textLower = text.toString().toLowerCase();
-
-                    // --- STOK TAB ---
-                    if (activeTab === 'stok') {
-                        // Lokasi (Index 4 - previously 3)
-                        if (data.column.index === 4) {
-                            if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105]; // DimGray
-                            else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180]; // Strong Blue
-                            else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45]; // Sienna (Brownish)
-                            else if (textLower.includes('produksi')) data.cell.styles.textColor = [200, 100, 0]; // Dark Orange
-                            else if (textLower.includes('pos')) data.cell.styles.textColor = [75, 0, 130]; // Indigo
-                            else data.cell.styles.textColor = [0, 0, 0]; // Default
-                        }
-
-                        // Kondisi (Index 5 - previously 4)
-                        if (data.column.index === 5) {
-                            data.cell.styles.fontStyle = 'bold';
-                            if (textLower.includes('bagus') || textLower.includes('baik')) {
-                                data.cell.styles.textColor = [0, 128, 0]; // Green
-                            } else if (textLower.includes('rusak ringan')) {
-                                data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
-                            } else if (textLower.includes('rusak berat') || textLower.includes('rusak')) {
-                                data.cell.styles.textColor = [220, 20, 60]; // Red
-                            } else if (textLower.includes('perlu perbaikan')) {
-                                data.cell.styles.textColor = [147, 112, 219]; // MediumPurple
-                            } else if (textLower.includes('hilang')) {
-                                data.cell.styles.textColor = [128, 128, 128]; // Gray
-                            }
-                        }
+                    const txt = (data.cell.raw as string) || '';
+                    if (txt.toLowerCase().includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
+                    if (txt.toLowerCase().includes('bagus') || txt.toLowerCase().includes('dikembalikan')) {
+                        data.cell.styles.textColor = [0, 128, 0];
                     }
-
-                    // --- PEMINJAMAN TAB ---
-                    if (activeTab === 'peminjaman' && data.column.index === 5) { // Index 5 - previously 4
-                        data.cell.styles.fontStyle = 'bold';
-                        if (textLower === 'dipinjam') {
-                            data.cell.styles.textColor = [218, 165, 32]; // Goldenrod
-                        } else if (textLower === 'dikembalikan') {
-                            data.cell.styles.textColor = [0, 100, 0]; // Dark Green
-                        } else if (textLower === 'terlambat') {
-                            data.cell.styles.textColor = [220, 20, 60]; // Red
-                        }
-                    }
-
-                    // --- MAINTENANCE TAB ---
-                    if (activeTab === 'maintenance') {
-                        // Lokasi (Index 2 - previously 1)
-                        if (data.column.index === 2) {
-                            if (textLower.includes('gudang')) data.cell.styles.textColor = [105, 105, 105];
-                            else if (textLower.includes('kantor')) data.cell.styles.textColor = [0, 80, 180];
-                            else if (textLower.includes('lapangan')) data.cell.styles.textColor = [160, 82, 45];
-                            else data.cell.styles.textColor = [0, 0, 0];
-                        }
-                        // Kondisi (Index 3 - previously 2) (Status)
-                        // Note: In maintenance tab, 'Kondisi' (status) was index 3 in body? Wait.
-                        // Head: 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status'
-                        // Body: name, location, schedule, status
-                        // New Head: 'No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status'
-                        // New Body: no, name, location, schedule, status
-                        // Lokasi is now index 2.
-                        // Status (Kondisi in invalid previous comment???) is index 4.
-                        // Wait, previous code said:
-                        // // Kondisi (Index 2) -> But body had: [name, location, schedule, status]
-                        // Index 0: Name, Index 1: Location, Index 2: Schedule, Index 3: Status
-                        // The previous code had:
-                        // if (data.column.index === 2) ... which was 'Jadwal Servis'??
-                        // Let's re-read the previous code carefully.
-                        // PREVIOUS:
-                        // head = [['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']];
-                        // body = [item.nama, item.lokasi, ..., item.kondisi]
-                        // Index 0: Name
-                        // Index 1: Lokasi
-                        // Index 2: Jadwal
-                        // Index 3: Status (item.kondisi)
-                        //
-                        // The previous color coding logic:
-                        // if (data.column.index === 1) -> Lokasi (Correct)
-                        // if (data.column.index === 2) -> "Kondisi" ... wait, index 2 is Jadwal Servis.
-                        // Ah, let's check the body map again.
-                        // body = item.nama, item.lokasi, item.jadwal..., item.kondisi
-                        // So index 2 is indeed Jadwal Servis.
-                        // But the code key was commenting "Kondisi (Index 2)".
-                        // Maybe the user meant Status? Or maybe my previous analysis of the body map was slightly off or I'm misreading the index.
-                        // Let's look at the body map again:
-                        // item.nama, item.lokasi, item.jadwal_servis_berikutnya, item.kondisi
-                        // Index 0, 1, 2, 3.
-                        // So checking index 2 for "bagus/rusak" seems wrong if index 2 is a date.
-                        // Unless "item.kondisi" is actually at index 2?
-                        // No, body mapping is clear.
-                        // Let's fix this.
-                        // New mapping:
-                        // Index 0: No
-                        // Index 1: Name
-                        // Index 2: Lokasi
-                        // Index 3: Jadwal
-                        // Index 4: Status (item.kondisi)
-
-                        // Status (Index 4)
-                        if (data.column.index === 4) {
-                            data.cell.styles.fontStyle = 'bold';
-                            if (textLower.includes('bagus')) data.cell.styles.textColor = [0, 128, 0];
-                            else if (textLower.includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
-                        }
-
-                        // Wait, there was another block:
-                        // // Status Jadwal (Index 4)
-                        // if (data.column.index === 4) { ... "lewat", "aman" }
-                        // This corresponds to checking if the schedule is late.
-                        // But "lewat" or "aman" isn't in the body text for Index 4 (which is item.kondisi).
-                        // Ah, the TABLE DISPLAY in JSX calculates "Lewat Jadwal" / "Aman" on the fly.
-                        // But the PDF BODY just puts `item.kondisi` (e.g. "Bagus", "Rusak").
-                        // So the PDF doesn't actually show "Lewat Jadwal" / "Aman"?
-                        // Let's check the body map for maintenance again.
-                        // body = ... item.kondisi.
-                        // So the PDF shows the physical condition, not the schedule status.
-                        // So checking for "lewat" in the PDF body text won't work unless we add it to the text.
-                        // The previous code had `if (data.column.index === 4) ... textLower.includes('lewat')`.
-                        // But the body data at index 3 (previously) was `item.kondisi`.
-                        // `item.kondisi` is "Baik", "Rusak", etc.
-                        // So that previous code block for "Status Jadwal" might have been dead code or based on a misunderstanding of what is printed.
-                        //
-                        // HOWEVER, I should stick to the requested changes: Adding Numbering.
-                        // I will retain the logic for coloring `item.kondisi` (now at index 4).
-                        // I will REMOVE the dead code for "Status Jadwal" if it's indeed not in the text, OR I will update the body to include it if that was the intention.
-                        // But the user just asked for "Numbering".
-                        // I'll stick to shifting the indices.
-                        //
-                        // Re-evaluating Maintenance Tab Indices:
-                        // Old Head: ['Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']
-                        // Old Body: [nama, lokasi, jadwal, kondisi] (Indices: 0, 1, 2, 3)
-                        //
-                        // Previous Code:
-                        // if (activeTab === 'maintenance') {
-                        //    if (index === 1) ... // Lokasi
-                        //    if (index === 2) ... // Thought it was Kondisi, but it checks textLower.includes('bagus').
-                        //       But index 2 is Jadwal (Date). A date won't have 'bagus'.
-                        //       So that code was likely buggy/doing nothing.
-                        //    if (index === 4) ... // "Status Jadwal". Index 4 doesn't exist in a 4-col table (0-3).
-                        //       So that was definitely dead code.
-                        // }
-                        // 
-                        // I will fix the indices to match the content.
-                        // New Head: ['No', 'Nama Alat', 'Lokasi', 'Jadwal Servis', 'Status']
-                        // New Body: [No, nama, lokasi, jadwal, kondisi]
-                        // Indices:
-                        // 0: No
-                        // 1: Nama
-                        // 2: Lokasi (Checks 'gudang', etc.)
-                        // 3: Jadwal (Date)
-                        // 4: Status (Kondisi - checks 'bagus', 'rusak')
-
-                        // Condtion (Index 4)
-                        if (data.column.index === 4) {
-                            data.cell.styles.fontStyle = 'bold';
-                            if (textLower.includes('bagus')) data.cell.styles.textColor = [0, 128, 0];
-                            else if (textLower.includes('rusak')) data.cell.styles.textColor = [220, 20, 60];
-                        }
+                    if (txt.toLowerCase().includes('dipinjam') || txt.toLowerCase().includes('perbaikan')) {
+                        data.cell.styles.textColor = [218, 165, 32];
                     }
                 }
             }
@@ -353,287 +327,215 @@ const Laporan = () => {
     };
 
     const handlePreviewPDF = async () => {
-        const doc = await generatePDF();
-        const pdfBlob = doc.output('blob');
-        const url = URL.createObjectURL(pdfBlob);
-        setPdfUrl(url);
-        setShowPdfPreview(true);
-    };
-
-    const exportPDF = async () => { // Keep for backward compatibility if needed, or just redirect
-        const doc = await generatePDF();
-        doc.save(`Laporan_${activeTab}_${Date.now()}.pdf`);
-    };
-
-    const exportExcel = () => {
-        let data = [];
-        let fileName = `Laporan_${activeTab}`;
-
-        if (activeTab === 'stok') {
-            data = inventory.map(item => ({
-                'Kode Alat': item.kode_alat,
-                'Nama': item.nama,
-                'Kategori': item.kategori,
-                'Lokasi': item.lokasi,
-                'Kondisi': item.kondisi,
-                'Total': item.jumlah,
-                'Tersedia': item.jumlah_tersedia
-            }));
-        } else if (activeTab === 'peminjaman') {
-            data = loans.map(loan => ({
-                'Peminjam': loan.nama_peminjam,
-                'Barang': loan.nama_barang,
-                'Tgl Pinjam': loan.tanggal_pinjam,
-                'Tgl Kembali': loan.tanggal_kembali,
-                'Catatan': loan.catatan,
-                'Status': loan.status
-            }));
-        } else {
-            data = maintenanceItems.map(item => ({
-                'Nama Alat': item.nama,
-                'Lokasi': item.lokasi,
-                'Kondisi Saat Ini': item.kondisi,
-                'Jadwal Servis': item.jadwal_servis_berikutnya
-            }));
+        setIsGenerating(true);
+        try {
+            const doc = await generatePDFDocument();
+            const pdfBlob = doc.output('blob');
+            const url = URL.createObjectURL(pdfBlob);
+            setPdfUrl(url);
+            setShowPdfPreview(true);
+        } catch (error: any) {
+            Swal.fire('Error', 'Gagal memuat pratinjau PDF: ' + error.message, 'error');
+        } finally {
+            setIsGenerating(false);
         }
+    };
 
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, activeTab);
-        XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    const handleDownloadPDF = async () => {
+        setIsGenerating(true);
+        try {
+            const doc = await generatePDFDocument();
+            doc.save(`Laporan_${selectedReport}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+            Swal.fire('Berhasil', 'Laporan PDF telah diunduh.', 'success');
+        } catch (error: any) {
+            Swal.fire('Error', 'Gagal membuat PDF: ' + error.message, 'error');
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 w-full animate-fade-in pb-20">
-
-            {/* HEADER */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
-                        <FaChartBar className="text-[#013220]" /> Laporan & Analitik
-                    </h1>
-                    <p className="text-slate-500">Unduh laporan resmi untuk audit dan manajemen.</p>
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={exportExcel}
-                        className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 transition shadow-sm font-semibold"
-                    >
-                        <FaFileExcel /> Excel
-                    </button>
-                    <button
-                        onClick={handlePreviewPDF}
-                        className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition shadow-sm font-semibold"
-                    >
-                        <FaFilePdf /> Preview PDF
-                    </button>
-                </div>
+        <div className="animate-fade-in space-y-6 pb-20">
+            {/* Header */}
+            <div className="bg-white p-8 rounded-[2rem] shadow-modern border border-slate-100">
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Pusat Laporan & Analitik</h1>
+                <p className="text-slate-500 mt-2 font-medium">Buat dan unduh laporan resmi untuk keperluan audit dan *track record* operasional.</p>
             </div>
 
-            {/* FILTER & CONTROLS */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Kiri: Pilihan Laporan */}
+                <div className="lg:col-span-2 space-y-4">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest px-2 mb-2">1. Pilih Jenis Laporan</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {reportTypes.map((report) => (
+                            <button
+                                key={report.id}
+                                onClick={() => setSelectedReport(report.id)}
+                                className={`text-left p-6 rounded-[2rem] border-2 transition-all duration-300 flex flex-col h-full ${selectedReport === report.id
+                                    ? 'border-sgd-500 bg-sgd-50/50 shadow-md ring-4 ring-sgd-500/10'
+                                    : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'
+                                    }`}
+                            >
+                                <div className={`text-3xl mb-4 ${selectedReport === report.id ? 'scale-110' : ''} transition-transform`}>
+                                    {report.icon}
+                                </div>
+                                <h4 className={`font-black text-lg ${selectedReport === report.id ? 'text-sgd-600' : 'text-slate-800'}`}>
+                                    {report.title}
+                                </h4>
+                                <p className="text-sm text-slate-500 mt-2 flex-grow">
+                                    {report.desc}
+                                </p>
 
-                {/* Tabs */}
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button
-                        onClick={() => setActiveTab('stok')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stok' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <div className="flex items-center gap-2"><FaBox /> Stok Aset</div>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('peminjaman')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'peminjaman' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <div className="flex items-center gap-2"><FaExchangeAlt /> Peminjaman</div>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('maintenance')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'maintenance' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <div className="flex items-center gap-2"><FaTools /> Maintenance</div>
-                    </button>
+                                {selectedReport === report.id && (
+                                    <div className="mt-6 pt-4 border-t border-sgd-200/50 flex justify-end">
+                                        <div className="w-8 h-8 bg-sgd-500 text-white rounded-full flex items-center justify-center shadow-md">
+                                            <FaCheckCircle className="text-sm" />
+                                        </div>
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Date Filter (Only for Peminjaman) */}
-                {activeTab === 'peminjaman' && (
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-                        <FaCalendarAlt className="text-slate-400" />
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="bg-transparent border-none text-sm font-medium focus:ring-0 text-slate-700"
-                        />
-                        <span className="text-slate-400">-</span>
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="bg-transparent border-none text-sm font-medium focus:ring-0 text-slate-700"
-                        />
+                {/* Kanan: Filter & Aksi */}
+                <div className="space-y-6">
+                    {/* Render Date Filter ONLY for Riwayat Pinjam */}
+                    <div className={`transition-all duration-300 ${selectedReport === 'riwayat_pinjam' ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'}`}>
+                        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-modern">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <FaCalendarAlt /> Filter Tanggal
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Mulai Tanggal</label>
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-sgd-500/10 focus:border-sgd-500 outline-none transition-all font-bold text-slate-700"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Sampai Tanggal</label>
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-sgd-500/10 focus:border-sgd-500 outline-none transition-all font-bold text-slate-700"
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-400 italic">Filter berdasar tanggal peminjaman dibuat.</p>
+                            </div>
+                        </div>
                     </div>
-                )}
-            </div>
 
-            {/* DATA TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[400px]">
-                {loading ? (
-                    <div className="flex items-center justify-center h-64 text-slate-400">Loading data...</div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-bold">
-                                <tr>
-                                    {activeTab === 'stok' && (
-                                        <>
-                                            <th className="px-6 py-4">Kode</th>
-                                            <th className="px-6 py-4">Nama Alat</th>
-                                            <th className="px-6 py-4">Kategori</th>
-                                            <th className="px-6 py-4">Lokasi</th>
-                                            <th className="px-6 py-4">Kondisi</th>
-                                            <th className="px-6 py-4 text-center">Stok</th>
-                                        </>
-                                    )}
-                                    {activeTab === 'peminjaman' && (
-                                        <>
-                                            <th className="px-6 py-4">Peminjam</th>
-                                            <th className="px-6 py-4">Barang</th>
-                                            <th className="px-6 py-4">Tgl Pinjam</th>
-                                            <th className="px-6 py-4">Tgl Kembali</th>
-                                            <th className="px-6 py-4">Status</th>
-                                        </>
-                                    )}
-                                    {activeTab === 'maintenance' && (
-                                        <>
-                                            <th className="px-6 py-4">Nama Alat</th>
-                                            <th className="px-6 py-4">Lokasi</th>
-                                            <th className="px-6 py-4">Kondisi Saat Ini</th>
-                                            <th className="px-6 py-4">Jadwal Servis</th>
-                                            <th className="px-6 py-4">Status Jadwal</th>
-                                        </>
-                                    )}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {activeTab === 'stok' && inventory.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                                        <td className="px-6 py-4 text-xs font-mono text-slate-500">{item.kode_alat}</td>
-                                        <td className="px-6 py-4 font-bold text-slate-800">{item.nama}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{item.kategori}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{item.lokasi}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${item.kondisi === 'Bagus' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                                }`}>
-                                                {item.kondisi}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center font-mono font-bold text-slate-700">
-                                            {item.jumlah_tersedia} / {item.jumlah}
-                                        </td>
-                                    </tr>
-                                ))}
+                    <div className="bg-slate-900 text-white p-8 rounded-[2rem] border border-slate-800 shadow-xl overflow-hidden relative">
+                        {/* Decorative circle */}
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-sgd-500 rounded-full blur-[60px] opacity-20 -mr-20 -mt-20 pointer-events-none"></div>
 
-                                {activeTab === 'peminjaman' && loans.map((loan) => (
-                                    <tr key={loan.id} className="hover:bg-slate-50/50 transition">
-                                        <td className="px-6 py-4 font-bold text-slate-800">{loan.nama_peminjam}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{loan.nama_barang}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            {format(new Date(loan.tanggal_pinjam), 'dd MMM yyyy', { locale: idLocale })}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            {loan.tanggal_kembali ? format(new Date(loan.tanggal_kembali), 'dd MMM yyyy', { locale: idLocale }) : '-'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${loan.status === 'dipinjam' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                                                }`}>
-                                                {loan.status}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
+                        <div className="relative z-10">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <FaChartPie className="text-sgd-500" /> Ringkasan Cepat
+                            </h3>
+                            <div className="space-y-3 mb-8">
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <span className="text-xs text-slate-400 font-bold uppercase">Report Mode</span>
+                                    <span className="text-xs font-black text-sgd-400 uppercase tracking-widest">{selectedReport.replace('_', ' ')}</span>
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <span className="text-xs text-slate-400 font-bold uppercase">Format</span>
+                                    <span className="text-xs font-black text-slate-100 italic uppercase">PDF / Excel Ready</span>
+                                </div>
+                            </div>
 
-                                {activeTab === 'maintenance' && maintenanceItems.map((item) => {
-                                    const isLate = new Date(item.jadwal_servis_berikutnya) < new Date();
-                                    return (
-                                        <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                                            <td className="px-6 py-4 font-bold text-slate-800">{item.nama}</td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">{item.lokasi}</td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">{item.kondisi}</td>
-                                            <td className="px-6 py-4 font-mono text-slate-700">
-                                                {item.jadwal_servis_berikutnya ? format(new Date(item.jadwal_servis_berikutnya), 'dd MMM yyyy', { locale: idLocale }) : '-'}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {isLate ? (
-                                                    <span className="flex items-center gap-1 text-red-600 font-bold text-xs">
-                                                        <FaSearch /> Lewat Jadwal
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-green-600 font-bold text-xs">Aman</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <FaDownload /> Generate Format
+                            </h3>
 
-                                {((activeTab === 'stok' && inventory.length === 0) ||
-                                    (activeTab === 'peminjaman' && loans.length === 0) ||
-                                    (activeTab === 'maintenance' && maintenanceItems.length === 0)) && (
-                                        <tr>
-                                            <td colSpan={6} className="py-20 text-center text-slate-400">Tidak ada data untuk ditampilkan.</td>
-                                        </tr>
-                                    )}
-                            </tbody>
-                        </table>
+                            <div className="space-y-4">
+                                <button
+                                    onClick={handleGenerateExcel}
+                                    disabled={isGenerating}
+                                    className="w-full py-4 px-6 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold transition-all shadow-sm border border-white/10 hover:border-white/20 flex items-center justify-between group disabled:opacity-50 active:scale-95"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <FaFileExcel className="text-emerald-400 text-2xl" />
+                                        <span>Download Data Excel</span>
+                                    </div>
+                                    <FaDownload className="text-slate-500 group-hover:text-emerald-400 group-hover:-translate-y-1 transition-all" />
+                                </button>
+
+                                <button
+                                    onClick={handlePreviewPDF}
+                                    disabled={isGenerating}
+                                    className="w-full py-4 px-6 bg-white hover:bg-slate-50 text-slate-900 rounded-2xl font-black transition-all shadow-xl shadow-white/5 flex items-center justify-between group disabled:opacity-50 active:scale-95 border-2 border-transparent hover:border-red-500/20"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <FaFilePdf className="text-red-500 text-2xl" />
+                                        <span>Buka Dokumen PDF</span>
+                                    </div>
+                                    <FaDownload className="text-slate-300 group-hover:text-red-500 group-hover:-translate-y-1 transition-all" />
+                                </button>
+                            </div>
+
+                            {isGenerating && (
+                                <div className="mt-6 flex items-center justify-center gap-3 text-sgd-300 text-sm font-bold animate-pulse">
+                                    <div className="w-5 h-5 border-4 border-sgd-500 border-t-transparent rounded-full animate-spin"></div>
+                                    Memproses Data...
+                                </div>
+                            )}
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
 
             {/* PDF PREVIEW MODAL */}
             {showPdfPreview && pdfUrl && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                    <div className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl animate-fade-in-up">
-                        <div className="flex justify-between items-center p-4 border-b">
-                            <h3 className="text-xl font-bold text-slate-800">Preview Laporan PDF</h3>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 sm:p-8">
+                    <div className="bg-white w-full max-w-5xl h-[95vh] rounded-[2rem] flex flex-col shadow-2xl animate-scale-up overflow-hidden border border-slate-200">
+                        {/* Modal Header */}
+                        <div className="flex justify-between items-center px-8 py-5 border-b border-slate-100 bg-slate-50 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-red-100 text-red-600 rounded-xl">
+                                    <FaFilePdf className="text-xl" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 leading-tight">Preview Laporan Resmi</h3>
+                                    <p className="text-xs text-slate-500 font-medium">Bentuk tampilan saat dicetak</p>
+                                </div>
+                            </div>
                             <button
                                 onClick={() => setShowPdfPreview(false)}
-                                className="p-2 hover:bg-slate-100 rounded-full transition"
+                                className="p-3 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 border border-slate-200 rounded-xl transition-all shadow-sm active:scale-95"
                             >
-                                <FiX size={24} />
+                                <FiX size={20} />
                             </button>
                         </div>
 
-                        <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
+                        {/* Iframe Body */}
+                        <div className="flex-1 bg-slate-800 p-4 sm:p-8 overflow-hidden rounded-b-[2rem] relative">
+                            <div className="absolute inset-0 bg-slate-900 opacity-50 pointer-events-none"></div>
                             <iframe
                                 src={pdfUrl}
-                                className="w-full h-full rounded-lg shadow-inner"
+                                className="w-full h-full rounded-xl shadow-2xl relative z-10 border border-slate-700 bg-slate-100"
                                 title="PDF Preview"
                             />
-                        </div>
 
-                        <div className="p-4 border-t flex justify-end gap-3 bg-white rounded-b-2xl">
-                            <button
-                                onClick={() => setShowPdfPreview(false)}
-                                className="px-5 py-2 text-slate-600 font-semibold hover:bg-slate-50 rounded-lg transition"
-                            >
-                                Tutup
-                            </button>
-                            <button
-                                onClick={() => {
-                                    const a = document.createElement('a');
-                                    a.href = pdfUrl;
-                                    a.download = `Laporan_${activeTab}_${Date.now()}.pdf`;
-                                    a.click();
-                                }}
-                                className="px-5 py-2 bg-red-600 text-white font-bold rounded-lg shadow-lg hover:bg-red-700 transition flex items-center gap-2"
-                            >
-                                <FaFilePdf /> Download PDF
-                            </button>
+                            {/* Floating Download Button over PDF */}
+                            <div className="absolute bottom-12 right-12 z-20">
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    className="px-6 py-4 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-900/50 hover:bg-red-500 hover:shadow-red-900/80 hover:-translate-y-1 transition-all flex items-center gap-3 active:scale-95 border border-red-400"
+                                >
+                                    <FaDownload className="text-lg" /> Simpan Ke Perangkat (PDF)
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
+
         </div>
     );
 };

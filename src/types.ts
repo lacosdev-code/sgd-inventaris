@@ -8,6 +8,8 @@ export interface InventoryItem {
     price: number;
     image_url?: string;
     created_at?: string;
+    assigned_to?: string; // UUID of technician
+    assigned_to_technician?: { nama: string }; // For joined queries
 }
 
 export interface PersonnelItem {

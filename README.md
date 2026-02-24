@@ -17,7 +17,7 @@ Our system operates on a "One Database, Two Frontends" philosophy to ensure clea
   - Master Data CRUD (Inventory, Tools, Personnel).
   - Stock & Asset Management.
   - Comprehensive Audit Logs & Activity Monitoring.
-  - Reporting and Analytics.
+  - Reporting & Analytics (Excel & PDF Exports).
 - **Privilege Level:** Admin Only.
 
 ### 2. Technician Portal (External PWA)

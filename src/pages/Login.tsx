@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { FaLock, FaEnvelope, FaTools, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaLock, FaEnvelope, FaTools, FaEye, FaEyeSlash, FaWhatsapp } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 
 const Login = () => {
@@ -36,18 +36,46 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      // 1. Try WA login first (RPC)
       const formattedWA = whatsapp.replace(/\D/g, '');
-      const { data, error } = await supabase.rpc('authenticate_technician', { p_whatsapp: formattedWA });
+      let techData = null;
+      let loginError = null;
 
-      if (error) throw error;
-      if (!data.success) throw new Error(data.message);
+      if (formattedWA.length >= 8) {
+        const { data, error } = await supabase.rpc('authenticate_technician', { p_whatsapp: formattedWA });
+        if (!error && data?.success) {
+          techData = data.technician;
+        } else {
+          loginError = error || (data ? new Error(data.message) : null);
+        }
+      }
+
+      // 2. Fallback: Search by Name if WA lookup failed or input is text
+      if (!techData) {
+        const { data: byName, error: nameError } = await supabase
+          .from('technicians')
+          .select('*')
+          .ilike('name', whatsapp.trim())
+          .maybeSingle();
+
+        if (byName) {
+          techData = {
+            id: byName.id,
+            name: byName.name,
+            whatsapp: byName.whatsapp_number,
+            avatar_url: byName.avatar_url
+          };
+        } else {
+          throw new Error('Nomor WA atau Nama tidak ditemukan. Cek kembali data Anda atau hubungi Admin.');
+        }
+      }
 
       // Store tech info in localStorage for persistence
-      localStorage.setItem('tech_session', JSON.stringify(data.technician));
+      localStorage.setItem('tech_session', JSON.stringify(techData));
 
       Swal.fire({
         icon: 'success',
-        title: 'Halo, ' + data.technician.name,
+        title: 'Halo, ' + techData.name,
         text: 'Login berhasil!',
         timer: 1500,
         showConfirmButton: false
@@ -133,19 +161,24 @@ const Login = () => {
               </form>
             ) : (
               <form onSubmit={handleTechLogin} className="space-y-4">
-                <div className="relative">
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-                    <span className="text-green-600 font-bold text-sm">62</span>
+                <div className="relative group">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center group-focus-within:bg-green-500 group-focus-within:text-white transition-all text-green-600 z-10 border border-green-100 group-focus-within:border-green-500 shadow-sm">
+                    <FaWhatsapp className="text-xl" />
                   </div>
                   <input
-                    type="text" required placeholder="Nomor WhatsApp (Contoh: 812...)"
-                    className="w-full pl-16 pr-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-green-500 focus:bg-white outline-none transition-all font-black text-slate-800 text-base"
+                    type="text" required placeholder="Nomor WhatsApp atau Nama"
+                    className="w-full pl-16 pr-[85px] py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-green-500 focus:bg-white outline-none transition-all font-bold text-slate-400 placeholder:text-slate-400 focus:text-slate-700 text-sm"
                     value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
                   />
+                  <div className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase tracking-widest pointer-events-none">
+                    0812 / NAMA
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-400 font-bold text-center uppercase tracking-widest pl-1 mb-6">Gunakan nomor WA yang terdaftar</p>
-                <button type="submit" disabled={loading} className="w-full py-5 bg-green-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-green-100 hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">
-                  {loading ? 'MEMERIKSA NOMOR...' : 'MASUK PORTAL TEKNISI →'}
+                <p className="text-[10px] text-slate-400 font-medium px-1 mb-6 flex items-center gap-1.5">
+                  <span className="text-sm">💡</span> Bisa masukan <span className="font-bold text-slate-500">nomor WA</span> atau <span className="font-bold text-slate-500">nama lengkap</span> yang terdaftar
+                </p>
+                <button type="submit" disabled={loading} className="w-full py-5 bg-[#1f9d4d] text-white rounded-2xl font-black text-sm shadow-xl shadow-green-100 hover:bg-[#1a8542] transition-all active:scale-95 disabled:opacity-50 mt-2">
+                  {loading ? 'MEMERIKSA DATA...' : 'MASUK PORTAL TEKNISI →'}
                 </button>
               </form>
             )}
